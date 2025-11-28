@@ -1,0 +1,25 @@
+/ {
+    zip_inertia: zip_inertia {
+        compatible = "zmk,input-processor-inertia"; 
+        status = "okay";
+        #input-processor-cells = <0>;
+
+        // decay-factor-int = <90>;     
+        // report-interval-ms = <35>;  
+        // threshold-start = <15>;
+        // threshold-stop = <1>;
+        // scroll-mode;
+    };
+
+    zip_inertia_scroll: zip_inertia_scroll {
+        compatible = "zmk,input-processor-inertia"; 
+        status = "okay";
+        #input-processor-cells = <0>;
+
+        // decay-factor-int = <90>;     
+        // report-interval-ms = <35>;  
+        // threshold-start = <15>;
+        // threshold-stop = <1>;
+        scroll-mode;
+    };
+};
