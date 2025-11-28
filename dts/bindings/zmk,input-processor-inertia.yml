@@ -1,0 +1,52 @@
+# Copyright (c) 2025 @amgskobo
+# SPDX-License-Identifier: MIT
+
+description: ZMK Inertia Input Processor
+
+compatible: "zmk,input-processor-inertia"
+
+include: ip_zero_param.yaml
+
+compatible: "zmk,input-processor-inertia"
+
+properties:
+  decay-factor-int:
+    type: int
+    required: false
+    default: 90
+    description: |
+      The decay factor, expressed as an integer percentage (0-100).
+      This determines how quickly the inertia velocity decreases in each interval.
+      A value of 85 means the velocity is multiplied by 0.85 (85/100) per interval.
+      
+  report-interval-ms:
+    type: int
+    required: false
+    default: 35
+    description: |
+      The time interval, in milliseconds (ms), between each decay calculation and 
+      pointer HID report transmission. This should typically match the sensor 
+      polling rate (e.g., 15ms or 16ms).
+  
+  threshold-start:
+    type: int
+    required: false
+    default: 15
+    description: |
+      The minimum velocity magnitude (in dx/dy units) required to activate inertial movement. 
+      Inertia is triggered if the cursor's speed upon release is faster than this threshold.
+
+  threshold-stop:
+    type: int
+    required: false
+    default: 1
+    description: |
+      The minimum velocity magnitude (in dx/dy units) required to continue the inertia calculation. 
+      When both current_vx and current_vy drop below this threshold, inertia stops.
+      
+  scroll-mode:
+    type: boolean
+    required: false
+    description: |
+      If true, movement is reported as horizontal (REL_HWHEEL) and vertical (REL_WHEEL) scrolling
+      instead of standard mouse movement (REL_X, REL_Y).
