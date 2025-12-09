@@ -1,5 +1,5 @@
 # ZMK Inertia Input Processor
-This module adds a **mouse inertia** effect to the ZMK **input processing pipeline**. After a relative movement input (like a trackpad or encoder) stops, it continues the motion according to a configured decay factor, creating a natural inertial scroll or mouse movement.
+This module adds a **mouse inertia** effect to the ZMK **input processing pipeline**. After a relative movement input (like a trackpad or trackball) stops, it continues the motion according to a configured decay factor, creating a natural inertial scroll or mouse movement.
 
 ### **✨ Features**
 
@@ -99,7 +99,8 @@ Add the configured inertia processor instance to the input-processors list withi
         scroller {  
             // ... (Other configurations)  
             input-processors = <&zip_xy_transform (INPUT_TRANSFORM_Y_INVERT)>,  
-                               <&zip_xy_scaler 1 10>,  
+                               <&zip_xy_scaler 1 10>,
+                               <&zip_xy_to_scroll_mapper>,
                                <&zip_inertia_scroll>; // Inertia processor MUST be placed last  
         };  
     };  
@@ -130,7 +131,7 @@ This approach allows **sub-integer movements** from the decay process to accumul
 
 
 # ZMK Inertia Input Processor (JP)
-このモジュールは、ZMKの**入力処理パイプライン**に**マウスの慣性（Inertia）効果を追加します。トラックパッドやエンコーダーなどの相対移動入力が終了した後、設定された減衰率に従って動きを継続**させ、自然な慣性スクロールやマウス移動を実現します。
+このモジュールは、ZMKの**入力処理パイプライン**に**マウスの慣性（Inertia）効果を追加します。トラックパッドやトラックボールなどの相対移動入力が終了した後、設定された減衰率に従って動きを継続**させ、自然な慣性スクロールやマウス移動を実現します。
 
 ### **✨ 機能概要**
 
@@ -225,6 +226,7 @@ zmk,input-listenerノード内のinput-processorsリストに、設定した慣�
             // ... (他の設定)
             input-processors = <&zip_xy_transform (INPUT_TRANSFORM_Y_INVERT)>,
                                <&zip_xy_scaler 1 10>,
+                               <&zip_xy_to_scroll_mapper>,
                                <&zip_inertia_scroll>; // スクロールモードの慣性プロセッサは最後に配置
         };
     };
