@@ -6,7 +6,14 @@ This module adds a **mouse inertia** effect to the ZMK **input processing pipeli
 * **Inertial Movement/Scrolling:** Continues and gradually decelerates movement after an input event (mouse movement or scroll) has finished.  
 * **Q8 Fixed-Point Arithmetic:** Uses Q8 fixed-point arithmetic for inertia decay calculation, balancing **precision** and **performance**.  
 * **Mouse/Scroll Mode:** Allows selection of whether to send Mouse Movement (INPUT\_REL\_X/Y) or Scroll (INPUT\_REL\_HWHEEL/WHEEL) HID reports.  
-* **Customizable Parameters:** Detailed settings for decay factor, report interval, and start/stop thresholds.
+*   **Customizable Parameters:** Detailed settings for decay factor, report interval, and start/stop thresholds.
+
+### **✅ Zephyr 4.1 Compatibility**
+
+As of ZMK's migration to **Zephyr 4.1**, this module remains fully compatible.
+*   **Input Subsystem:** This module utilizes the standard Zephyr Input Subsystem (`input_event`, `input_processor`), which is the modern standard ZMK is migrating *towards* (replacing the older `kscan` API).
+*   **HWMv2:** The Hardware Model V2 changes primarily affect board definitions. As a driver module, this codebase is unaffected and works seamlessly with HWMv2-based setups.
+
 
 ## **🛠️ Installation and Setup**
 
