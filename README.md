@@ -147,6 +147,13 @@ This approach allows **sub-integer movements** from the decay process to accumul
 * **マウス/スクロールモード:** マウス移動（INPUT\_REL\_X/Y）またはスクロール（INPUT\_REL\_HWHEEL/WHEEL）のいずれのHIDレポートを送信するかを選択できます。  
 * **カスタマイズ可能なパラメーター:** 減衰率、レポート間隔、開始・停止のしきい値などを詳細に設定できます。
 
+### **✅ Zephyr 4.1 互換性**
+
+ZMKの**Zephyr 4.1**への移行において、このモジュールは完全な互換性を維持しています。
+*   **入力サブシステム:** 本モジュールは、ZMKが移行を進めている標準のZephyr入力サブシステム（`input_event`, `input_processor`）を使用しています（古い`kscan` APIの代替）。
+*   **HWMv2:** Hardware Model V2の変更は主にボード定義に影響します。ドライバーモジュールである本コードベースは影響を受けず、HWMv2ベースの設定でシームレスに動作します。
+
+
 ## **🛠️ インストールと設定**
 ### **1\. Integrate the Module**
 モジュールの組み込みプロジェクトの`config/west.yml`ファイルに、このモジュールを追加します。
