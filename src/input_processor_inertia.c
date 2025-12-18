@@ -49,6 +49,7 @@ struct inertia_state {
     int16_t move_remainder_x_q8;
     int16_t move_remainder_y_q8;
     bool move_active;
+    bool move_is_inertial;
 
     // Scroll state
     int16_t scroll_vx;
@@ -56,6 +57,7 @@ struct inertia_state {
     int16_t scroll_remainder_x_q8;
     int16_t scroll_remainder_y_q8;
     bool scroll_active;
+    bool scroll_is_inertial;
 };
 
 struct inertia_data {
@@ -125,7 +127,10 @@ static void move_decay_callback(struct k_work *work) {
     if (abs16(next_vx) <= cfg->move_threshold_stop && abs16(next_vy) <= cfg->move_threshold_stop) {
         data->state.move_vx = 0;
         data->state.move_vy = 0;
+        data->state.move_remainder_x_q8 = 0;
+        data->state.move_remainder_y_q8 = 0;
         data->state.move_active = false;
+        data->state.move_is_inertial = false;
         k_mutex_unlock(&data->lock);
 
         zmk_hid_mouse_movement_set(0, 0);
@@ -137,6 +142,7 @@ static void move_decay_callback(struct k_work *work) {
     // Continue inertia
     data->state.move_vx = next_vx;
     data->state.move_vy = next_vy;
+    data->state.move_is_inertial = true;
 
     zmk_hid_mouse_movement_set(next_vx, next_vy);
     zmk_endpoints_send_mouse_report();
@@ -174,7 +180,10 @@ static void scroll_decay_callback(struct k_work *work) {
         abs16(next_vy) <= cfg->scroll_threshold_stop) {
         data->state.scroll_vx = 0;
         data->state.scroll_vy = 0;
+        data->state.scroll_remainder_x_q8 = 0;
+        data->state.scroll_remainder_y_q8 = 0;
         data->state.scroll_active = false;
+        data->state.scroll_is_inertial = false;
         k_mutex_unlock(&data->lock);
 
         zmk_hid_mouse_scroll_set(0, 0);
@@ -186,6 +195,7 @@ static void scroll_decay_callback(struct k_work *work) {
     // Continue inertia
     data->state.scroll_vx = next_vx;
     data->state.scroll_vy = next_vy;
+    data->state.scroll_is_inertial = true;
 
     zmk_hid_mouse_scroll_set(next_vx, next_vy);
     zmk_endpoints_send_mouse_report();
@@ -217,14 +227,16 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
 
         k_mutex_lock(&data->lock, K_FOREVER);
 
-        // If taking over from active inertia, clear old velocities on both axes
-        if (data->state.move_active) {
+        // Transition: If background inertia is running, clear it for a fresh manual start.
+        // We check move_is_inertial to prevent resetting X when the Y event of the same packet arrives.
+        if (data->state.move_active && data->state.move_is_inertial) {
             k_work_cancel_delayable(&data->move_work);
             data->state.move_active = false;
             data->state.move_vx = 0;
             data->state.move_vy = 0;
             data->state.move_remainder_x_q8 = 0;
             data->state.move_remainder_y_q8 = 0;
+            data->state.move_is_inertial = false;
         }
         // Also cancel scroll inertia to prevent conflict
         if (data->state.scroll_active) {
@@ -234,20 +246,18 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
             data->state.scroll_vy = 0;
             data->state.scroll_remainder_x_q8 = 0;
             data->state.scroll_remainder_y_q8 = 0;
+            data->state.scroll_is_inertial = false;
         }
 
-        if (event->code == INPUT_REL_X) {
-            data->state.move_vx = val;
-            data->state.move_remainder_x_q8 = 0;
-        }
-        if (event->code == INPUT_REL_Y) {
-            data->state.move_vy = val;
-            data->state.move_remainder_y_q8 = 0;
-        }
+        if (event->code == INPUT_REL_X) data->state.move_vx = val;
+        if (event->code == INPUT_REL_Y) data->state.move_vy = val;
 
+        // Manual movement is NOT marked as is_inertial yet.
+        // It becomes is_inertial only when the background timer takes over.
         if (abs16(data->state.move_vx) >= cfg->move_threshold_start ||
             abs16(data->state.move_vy) >= cfg->move_threshold_start) {
             data->state.move_active = true;
+            data->state.move_is_inertial = false; 
             k_work_reschedule(&data->move_work, K_MSEC(cfg->move_interval_ms));
             LOG_DBG("Move Inertia triggered. x %d, y %d", data->state.move_vx,
                     data->state.move_vy);
@@ -257,17 +267,18 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
     // --- SCROLLING ---
     else if (event->code == INPUT_REL_WHEEL || event->code == INPUT_REL_HWHEEL) {
         int16_t val = (int16_t)event->value;
-        if (val == 0) return ZMK_INPUT_PROC_CONTINUE;
+        //if (val == 0) return ZMK_INPUT_PROC_CONTINUE;
 
         k_mutex_lock(&data->lock, K_FOREVER);
 
-        if (data->state.scroll_active) {
+        if (data->state.scroll_active && data->state.scroll_is_inertial) {
             k_work_cancel_delayable(&data->scroll_work);
             data->state.scroll_active = false;
             data->state.scroll_vx = 0;
             data->state.scroll_vy = 0;
             data->state.scroll_remainder_x_q8 = 0;
             data->state.scroll_remainder_y_q8 = 0;
+            data->state.scroll_is_inertial = false;
         }
         // Also cancel move inertia to prevent conflict
         if (data->state.move_active) {
@@ -277,20 +288,16 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
             data->state.move_vy = 0;
             data->state.move_remainder_x_q8 = 0;
             data->state.move_remainder_y_q8 = 0;
+            data->state.move_is_inertial = false;
         }
 
-        if (event->code == INPUT_REL_HWHEEL) {
-            data->state.scroll_vx = val;
-            data->state.scroll_remainder_x_q8 = 0;
-        }
-        if (event->code == INPUT_REL_WHEEL) {
-            data->state.scroll_vy = val;
-            data->state.scroll_remainder_y_q8 = 0;
-        }
+        if (event->code == INPUT_REL_HWHEEL) data->state.scroll_vx = val;
+        if (event->code == INPUT_REL_WHEEL) data->state.scroll_vy = val;
 
         if (abs16(data->state.scroll_vx) >= cfg->scroll_threshold_start ||
             abs16(data->state.scroll_vy) >= cfg->scroll_threshold_start) {
             data->state.scroll_active = true;
+            data->state.scroll_is_inertial = false;
             k_work_reschedule(&data->scroll_work, K_MSEC(cfg->scroll_interval_ms));
             LOG_DBG("Scroll Inertia triggered. h %d, v %d", data->state.scroll_vx,
                     data->state.scroll_vy);
@@ -311,6 +318,7 @@ static int inertia_init(const struct device *dev) {
     data->state.move_remainder_x_q8 = 0;
     data->state.move_remainder_y_q8 = 0;
     data->state.move_active = false;
+    data->state.move_is_inertial = false;
 
     // Reset scroll state
     data->state.scroll_vx = 0;
@@ -318,6 +326,7 @@ static int inertia_init(const struct device *dev) {
     data->state.scroll_remainder_x_q8 = 0;
     data->state.scroll_remainder_y_q8 = 0;
     data->state.scroll_active = false;
+    data->state.scroll_is_inertial = false;
 
     k_mutex_init(&data->lock);
     k_work_init_delayable(&data->move_work, move_decay_callback);
