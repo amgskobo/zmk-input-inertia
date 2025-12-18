@@ -107,6 +107,8 @@ static void move_decay_callback(struct k_work *work) {
     k_mutex_lock(&data->lock, K_FOREVER);
     if (!data->state.move_active) {
         k_mutex_unlock(&data->lock);
+        zmk_hid_mouse_movement_set(0, 0);
+        zmk_endpoints_send_mouse_report();
         return;
     }
 
@@ -156,9 +158,11 @@ static void scroll_decay_callback(struct k_work *work) {
     struct inertia_data *data = CONTAINER_OF(d_work, struct inertia_data, scroll_work);
     const struct inertia_config *cfg = data->dev->config;
 
-    k_mutex_lock(&data->lock, K_FOREVER);
+    k_mutex_lock(&data->lock, K_FOREVER); 
     if (!data->state.scroll_active) {
         k_mutex_unlock(&data->lock);
+        zmk_hid_mouse_scroll_set(0, 0);
+        zmk_endpoints_send_mouse_report();
         return;
     }
 
