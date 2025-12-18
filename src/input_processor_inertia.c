@@ -21,31 +21,48 @@ LOG_MODULE_REGISTER(input_inertia, CONFIG_ZMK_LOG_LEVEL);
 #define DEFAULT_INERTIA_THRESHOLD_START 15
 #define DEFAULT_INERTIA_THRESHOLD_STOP 1
 
+#define DEFAULT_INERTIA_SCROLL_DECAY_FACTOR_INT 85
+#define DEFAULT_INERTIA_SCROLL_INTERVAL_MS 65
+#define DEFAULT_INERTIA_SCROLL_THRESHOLD_START 2
+#define DEFAULT_INERTIA_SCROLL_THRESHOLD_STOP 0
+
 #define abs16(x) ((x) < 0 ? -(x) : (x))
 
-struct inertia_config
-{
-    uint16_t decay_factor_int;
-    uint16_t interval_ms;
-    uint16_t threshold_start;
-    uint16_t threshold_stop;
-    bool scroll_mode;
+struct inertia_config {
+    // Mouse movement config
+    uint16_t move_decay_factor_int;
+    uint16_t move_interval_ms;
+    uint16_t move_threshold_start;
+    uint16_t move_threshold_stop;
+
+    // Scroll config
+    uint16_t scroll_decay_factor_int;
+    uint16_t scroll_interval_ms;
+    uint16_t scroll_threshold_start;
+    uint16_t scroll_threshold_stop;
 };
 
-struct inertia_state
-{
-    int16_t current_vx;
-    int16_t current_vy;
-    int16_t remainder_x_q8;
-    int16_t remainder_y_q8;
-    bool is_moving;
+struct inertia_state {
+    // Mouse movement state
+    int16_t move_vx;
+    int16_t move_vy;
+    int16_t move_remainder_x_q8;
+    int16_t move_remainder_y_q8;
+    bool move_active;
+
+    // Scroll state
+    int16_t scroll_vx;
+    int16_t scroll_vy;
+    int16_t scroll_remainder_x_q8;
+    int16_t scroll_remainder_y_q8;
+    bool scroll_active;
 };
 
-struct inertia_data
-{
+struct inertia_data {
     const struct device *dev;
     struct inertia_state state;
-    struct k_work_delayable inertia_decay_work;
+    struct k_work_delayable move_work;
+    struct k_work_delayable scroll_work;
     struct k_mutex lock;
 };
 
@@ -56,11 +73,9 @@ struct inertia_data
 #define Q8_VALUE (1 << 8) // 1.0 = 256
 #define Q8_HALF (1 << 7)  // 0.5 = 128
 
-void calculate_decayed_movement_fixed(int16_t in_dx, int16_t in_dy,
-                                      int16_t decay_factor_q8,
-                                      int16_t *out_dx, int16_t *out_dy,
-                                      int16_t *rem_x, int16_t *rem_y)
-{
+void calculate_decayed_movement_fixed(int16_t in_dx, int16_t in_dy, int16_t decay_factor_q8,
+                                      int16_t *out_dx, int16_t *out_dy, int16_t *rem_x,
+                                      int16_t *rem_y) {
     // 1. True Movement (Q8, including remainder)
     int32_t ideal_dx_q8 = ((int32_t)in_dx << 8) + *rem_x;
     int32_t ideal_dy_q8 = ((int32_t)in_dy << 8) + *rem_y;
@@ -82,142 +97,199 @@ void calculate_decayed_movement_fixed(int16_t in_dx, int16_t in_dy,
 }
 // ====================================================================
 
-static void inertia_decay_callback(struct k_work *work)
-{
-    // Retrieve the original device data structure from the k_work
+static void move_decay_callback(struct k_work *work) {
     struct k_work_delayable *d_work = k_work_delayable_from_work(work);
-    struct inertia_data *data = CONTAINER_OF(d_work, struct inertia_data, inertia_decay_work);
+    struct inertia_data *data = CONTAINER_OF(d_work, struct inertia_data, move_work);
     const struct inertia_config *cfg = data->dev->config;
 
     k_mutex_lock(&data->lock, K_FOREVER);
-    // Check stopping condition
-    int16_t vx = data->state.current_vx;
-    int16_t vy = data->state.current_vy;
+    int16_t vx = data->state.move_vx;
+    int16_t vy = data->state.move_vy;
     k_mutex_unlock(&data->lock);
 
     int16_t next_vx = vx;
     int16_t next_vy = vy;
 
-    // 1. Q8 Factor Scaling (0-100 -> 0-256)
-    int16_t decay_factor_q8 = (cfg->decay_factor_int * 256) / 100;
+    // 1. Q8 Factor Scaling
+    int16_t decay_factor_q8 = (cfg->move_decay_factor_int * 256) / 100;
 
-    // -----------------------------------------------------------------
-    // STEP 1: Q8 Fixed-Point Decay (WITH Remainder Accumulation)
+    // STEP 1: Q8 Fixed-Point Decay
     calculate_decayed_movement_fixed(vx, vy, decay_factor_q8, &next_vx, &next_vy,
-                                     &data->state.remainder_x_q8, &data->state.remainder_y_q8);
-    // -----------------------------------------------------------------
+                                     &data->state.move_remainder_x_q8,
+                                     &data->state.move_remainder_y_q8);
+
     // STEP 2: Termination and State Update
-    if (abs16(next_vx) <= cfg->threshold_stop && abs16(next_vy) <= cfg->threshold_stop)
-    {
+    if (abs16(next_vx) <= cfg->move_threshold_stop && abs16(next_vy) <= cfg->move_threshold_stop) {
         k_mutex_lock(&data->lock, K_FOREVER);
-        // Velocity is below the threshold, stop inertia motion
-        data->state.current_vx = 0;
-        data->state.current_vy = 0;
+        data->state.move_vx = 0;
+        data->state.move_vy = 0;
+        data->state.move_active = false;
         k_mutex_unlock(&data->lock);
-        if (cfg->scroll_mode)
-        {
-            zmk_hid_mouse_scroll_set(0, 0);
-        }
-        else
-        {
-            zmk_hid_mouse_movement_set(0, 0);
-        }
+
+        zmk_hid_mouse_movement_set(0, 0);
         zmk_endpoints_send_mouse_report();
-        LOG_DBG("Inertia stopped naturally. threshold_stop: %d", cfg->threshold_stop);
+        LOG_DBG("Move Inertia stopped naturally.");
         return;
     }
+
     // Continue inertia
     k_mutex_lock(&data->lock, K_FOREVER);
-    data->state.current_vx = next_vx;
-    data->state.current_vy = next_vy;
+    data->state.move_vx = next_vx;
+    data->state.move_vy = next_vy;
     k_mutex_unlock(&data->lock);
-    // Send HID report
-    if (cfg->scroll_mode)
-    {
-        zmk_hid_mouse_scroll_set(next_vx, next_vy);
-    }
-    else
-    {
-        zmk_hid_mouse_movement_set(next_vx, next_vy);
-    }
+
+    zmk_hid_mouse_movement_set(next_vx, next_vy);
     zmk_endpoints_send_mouse_report();
 
-    // Schedule the next update
-    k_work_reschedule(&data->inertia_decay_work, K_MSEC(cfg->interval_ms));
+    k_work_reschedule(&data->move_work, K_MSEC(cfg->move_interval_ms));
+}
+
+static void scroll_decay_callback(struct k_work *work) {
+    struct k_work_delayable *d_work = k_work_delayable_from_work(work);
+    struct inertia_data *data = CONTAINER_OF(d_work, struct inertia_data, scroll_work);
+    const struct inertia_config *cfg = data->dev->config;
+
+    k_mutex_lock(&data->lock, K_FOREVER);
+    int16_t vx = data->state.scroll_vx;
+    int16_t vy = data->state.scroll_vy;
+    k_mutex_unlock(&data->lock);
+
+    int16_t next_vx = vx;
+    int16_t next_vy = vy;
+
+    // 1. Q8 Factor Scaling
+    int16_t decay_factor_q8 = (cfg->scroll_decay_factor_int * 256) / 100;
+
+    // STEP 1: Q8 Fixed-Point Decay
+    calculate_decayed_movement_fixed(vx, vy, decay_factor_q8, &next_vx, &next_vy,
+                                     &data->state.scroll_remainder_x_q8,
+                                     &data->state.scroll_remainder_y_q8);
+
+    // STEP 2: Termination and State Update
+    if (abs16(next_vx) <= cfg->scroll_threshold_stop &&
+        abs16(next_vy) <= cfg->scroll_threshold_stop) {
+        k_mutex_lock(&data->lock, K_FOREVER);
+        data->state.scroll_vx = 0;
+        data->state.scroll_vy = 0;
+        data->state.scroll_active = false;
+        k_mutex_unlock(&data->lock);
+
+        zmk_hid_mouse_scroll_set(0, 0);
+        zmk_endpoints_send_mouse_report();
+        LOG_DBG("Scroll Inertia stopped naturally.");
+        return;
+    }
+
+    // Continue inertia
+    k_mutex_lock(&data->lock, K_FOREVER);
+    data->state.scroll_vx = next_vx;
+    data->state.scroll_vy = next_vy;
+    k_mutex_unlock(&data->lock);
+
+    zmk_hid_mouse_scroll_set(next_vx, next_vy);
+    zmk_endpoints_send_mouse_report();
+
+    k_work_reschedule(&data->scroll_work, K_MSEC(cfg->scroll_interval_ms));
 }
 
 /* --- Input Processor Handler (Event-Driven Pipeline) --- */
 
 static int inertia_handle_event(const struct device *dev, struct input_event *event,
                                 uint32_t param1, uint32_t param2,
-                                struct zmk_input_processor_state *state)
-{
+                                struct zmk_input_processor_state *state) {
     ARG_UNUSED(param1);
     ARG_UNUSED(param2);
     ARG_UNUSED(state);
 
-    int16_t current_dx = 0;
-    int16_t current_dy = 0;
-    // Process only pointer input (REL) events
-    if (event->type != INPUT_EV_REL)
-    {
-        return ZMK_INPUT_PROC_CONTINUE;
-    }
-    if ((event->code == INPUT_REL_X) || (event->code == INPUT_REL_HWHEEL))
-    {
-        current_dx = (int16_t)event->value;
-    }
-    else if ((event->code == INPUT_REL_Y) || (event->code == INPUT_REL_WHEEL))
-    {
-        current_dy = (int16_t)event->value;
-    }
-    else
-    {
+    if (event->type != INPUT_EV_REL) {
         return ZMK_INPUT_PROC_CONTINUE;
     }
 
     struct inertia_data *data = (struct inertia_data *)dev->data;
     const struct inertia_config *cfg = dev->config;
 
-    if (data->state.is_moving)
-    {
-        k_work_cancel_delayable(&data->inertia_decay_work);
-        data->state.is_moving = false;
-        LOG_DBG("Inertia cancelled by new input.");
+    // --- MOUSE MOVEMENT ---
+    if (event->code == INPUT_REL_X || event->code == INPUT_REL_Y) {
+        int16_t val = (int16_t)event->value;
+        if (val == 0) return ZMK_INPUT_PROC_CONTINUE;
+
+        // Cancel existing inertia if moving
+        if (data->state.move_active) {
+            k_work_cancel_delayable(&data->move_work);
+            data->state.move_active = false;
+        }
+        // Also cancel scroll inertia to prevent conflict
+        if (data->state.scroll_active) {
+            k_work_cancel_delayable(&data->scroll_work);
+            data->state.scroll_active = false;
+        }
+
+        k_mutex_lock(&data->lock, K_FOREVER);
+        if (event->code == INPUT_REL_X) data->state.move_vx = val;
+        if (event->code == INPUT_REL_Y) data->state.move_vy = val;
+
+        if (abs16(data->state.move_vx) >= cfg->move_threshold_start ||
+            abs16(data->state.move_vy) >= cfg->move_threshold_start) {
+            data->state.move_active = true;
+            k_work_reschedule(&data->move_work, K_MSEC(cfg->move_interval_ms));
+            LOG_DBG("Move Inertia triggered. x %d, y %d", data->state.move_vx,
+                    data->state.move_vy);
+        }
+        k_mutex_unlock(&data->lock);
+    }
+    // --- SCROLLING ---
+    else if (event->code == INPUT_REL_WHEEL || event->code == INPUT_REL_HWHEEL) {
+        int16_t val = (int16_t)event->value;
+        if (val == 0) return ZMK_INPUT_PROC_CONTINUE;
+
+        if (data->state.scroll_active) {
+            k_work_cancel_delayable(&data->scroll_work);
+            data->state.scroll_active = false;
+        }
+        // Also cancel move inertia to prevent conflict
+        if (data->state.move_active) {
+            k_work_cancel_delayable(&data->move_work);
+            data->state.move_active = false;
+        }
+
+        k_mutex_lock(&data->lock, K_FOREVER);
+        if (event->code == INPUT_REL_HWHEEL) data->state.scroll_vx = val;
+        if (event->code == INPUT_REL_WHEEL) data->state.scroll_vy = val;
+
+        if (abs16(data->state.scroll_vx) >= cfg->scroll_threshold_start ||
+            abs16(data->state.scroll_vy) >= cfg->scroll_threshold_start) {
+            data->state.scroll_active = true;
+            k_work_reschedule(&data->scroll_work, K_MSEC(cfg->scroll_interval_ms));
+            LOG_DBG("Scroll Inertia triggered. h %d, v %d", data->state.scroll_vx,
+                    data->state.scroll_vy);
+        }
+        k_mutex_unlock(&data->lock);
     }
 
-    k_mutex_lock(&data->lock, K_FOREVER);
-    if (current_dx != 0)
-    {
-        data->state.current_vx = current_dx;
-    }
-
-    if (current_dy != 0)
-    {
-        data->state.current_vy = current_dy;
-    }
-
-    if ((abs16(data->state.current_vx) >= cfg->threshold_start || abs16(data->state.current_vy) >= cfg->threshold_start))
-    {
-        data->state.is_moving = true;
-        k_work_reschedule(&data->inertia_decay_work, K_MSEC(cfg->interval_ms));
-        LOG_DBG("Inertia triggered. interval: (%dms) Initial speed x %d, y %d", cfg->interval_ms, data->state.current_vx, data->state.current_vy);
-    }
-    k_mutex_unlock(&data->lock);
     return ZMK_INPUT_PROC_CONTINUE;
 }
 
-static int inertia_init(const struct device *dev)
-{
+static int inertia_init(const struct device *dev) {
     struct inertia_data *data = (struct inertia_data *)dev->data;
     data->dev = dev;
-    data->state.current_vx = 0;
-    data->state.current_vy = 0;
-    data->state.remainder_x_q8 = 0;
-    data->state.remainder_y_q8 = 0;
-    data->state.is_moving = false;
+
+    // Reset move state
+    data->state.move_vx = 0;
+    data->state.move_vy = 0;
+    data->state.move_remainder_x_q8 = 0;
+    data->state.move_remainder_y_q8 = 0;
+    data->state.move_active = false;
+
+    // Reset scroll state
+    data->state.scroll_vx = 0;
+    data->state.scroll_vy = 0;
+    data->state.scroll_remainder_x_q8 = 0;
+    data->state.scroll_remainder_y_q8 = 0;
+    data->state.scroll_active = false;
+
     k_mutex_init(&data->lock);
-    k_work_init_delayable(&data->inertia_decay_work, inertia_decay_callback);
+    k_work_init_delayable(&data->move_work, move_decay_callback);
+    k_work_init_delayable(&data->scroll_work, scroll_decay_callback);
     return 0;
 }
 
@@ -226,17 +298,27 @@ static const struct zmk_input_processor_driver_api inertia_driver_api = {
     .handle_event = inertia_handle_event,
 };
 
-#define INERTIA_INST(n)                                                                             \
-    static struct inertia_data processor_inertia_data_##n = {};                                     \
-    static const struct inertia_config processor_inertia_config_##n = {                             \
-        .decay_factor_int = DT_INST_PROP_OR(n, decay_factor_int, DEFAULT_INERTIA_DECAY_FACTOR_INT), \
-        .interval_ms = DT_INST_PROP_OR(n, report_interval_ms, DEFAULT_INERTIA_INTERVAL_MS),         \
-        .threshold_start = DT_INST_PROP_OR(n, threshold_start, DEFAULT_INERTIA_THRESHOLD_START),    \
-        .threshold_stop = DT_INST_PROP_OR(n, threshold_stop, DEFAULT_INERTIA_THRESHOLD_STOP),       \
-        .scroll_mode = DT_INST_PROP_OR(n, scroll_mode, false),                                      \
-    };                                                                                              \
-    DEVICE_DT_INST_DEFINE(n, inertia_init, NULL, &processor_inertia_data_##n,                       \
-                          &processor_inertia_config_##n, POST_KERNEL,                               \
+#define INERTIA_INST(n)                                                                            \
+    static struct inertia_data processor_inertia_data_##n = {};                                    \
+    static const struct inertia_config processor_inertia_config_##n = {                            \
+        .move_decay_factor_int =                                                                   \
+            DT_INST_PROP_OR(n, decay_factor_int, DEFAULT_INERTIA_DECAY_FACTOR_INT),                \
+        .move_interval_ms = DT_INST_PROP_OR(n, report_interval_ms, DEFAULT_INERTIA_INTERVAL_MS),   \
+        .move_threshold_start =                                                                    \
+            DT_INST_PROP_OR(n, threshold_start, DEFAULT_INERTIA_THRESHOLD_START),                  \
+        .move_threshold_stop = DT_INST_PROP_OR(n, threshold_stop, DEFAULT_INERTIA_THRESHOLD_STOP), \
+                                                                                                   \
+        .scroll_decay_factor_int =                                                                 \
+            DT_INST_PROP_OR(n, scroll_decay_factor_int, DEFAULT_INERTIA_SCROLL_DECAY_FACTOR_INT),  \
+        .scroll_interval_ms =                                                                      \
+            DT_INST_PROP_OR(n, scroll_report_interval_ms, DEFAULT_INERTIA_SCROLL_INTERVAL_MS),     \
+        .scroll_threshold_start =                                                                  \
+            DT_INST_PROP_OR(n, scroll_threshold_start, DEFAULT_INERTIA_SCROLL_THRESHOLD_START),    \
+        .scroll_threshold_stop =                                                                   \
+            DT_INST_PROP_OR(n, scroll_threshold_stop, DEFAULT_INERTIA_SCROLL_THRESHOLD_STOP),      \
+    };                                                                                             \
+    DEVICE_DT_INST_DEFINE(n, inertia_init, NULL, &processor_inertia_data_##n,                      \
+                          &processor_inertia_config_##n, POST_KERNEL,                              \
                           CONFIG_KERNEL_INIT_PRIORITY_DEFAULT, &inertia_driver_api);
 
 DT_INST_FOREACH_STATUS_OKAY(INERTIA_INST)
