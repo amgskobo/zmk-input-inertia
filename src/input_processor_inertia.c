@@ -223,7 +223,6 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
     // --- MOUSE MOVEMENT ---
     if (event->code == INPUT_REL_X || event->code == INPUT_REL_Y) {
         int16_t val = (int16_t)event->value;
-        if (val == 0) return ZMK_INPUT_PROC_CONTINUE;
 
         k_mutex_lock(&data->lock, K_FOREVER);
 
@@ -237,6 +236,7 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
             data->state.move_remainder_x_q8 = 0;
             data->state.move_remainder_y_q8 = 0;
             data->state.move_is_inertial = false;
+            LOG_DBG("Move Inertia cancelled by manual input.");
         }
         // Also cancel scroll inertia to prevent conflict
         if (data->state.scroll_active) {
@@ -247,6 +247,7 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
             data->state.scroll_remainder_x_q8 = 0;
             data->state.scroll_remainder_y_q8 = 0;
             data->state.scroll_is_inertial = false;
+            LOG_DBG("Scroll Inertia cancelled by move input.");
         }
 
         if (event->code == INPUT_REL_X) data->state.move_vx = val;
@@ -267,7 +268,6 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
     // --- SCROLLING ---
     else if (event->code == INPUT_REL_WHEEL || event->code == INPUT_REL_HWHEEL) {
         int16_t val = (int16_t)event->value;
-        //if (val == 0) return ZMK_INPUT_PROC_CONTINUE;
 
         k_mutex_lock(&data->lock, K_FOREVER);
 
@@ -279,6 +279,7 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
             data->state.scroll_remainder_x_q8 = 0;
             data->state.scroll_remainder_y_q8 = 0;
             data->state.scroll_is_inertial = false;
+            LOG_DBG("Scroll Inertia cancelled by manual input.");
         }
         // Also cancel move inertia to prevent conflict
         if (data->state.move_active) {
@@ -289,6 +290,7 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
             data->state.move_remainder_x_q8 = 0;
             data->state.move_remainder_y_q8 = 0;
             data->state.move_is_inertial = false;
+            LOG_DBG("Move Inertia cancelled by scroll input.");
         }
 
         if (event->code == INPUT_REL_HWHEEL) data->state.scroll_vx = val;
