@@ -239,7 +239,7 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
             LOG_DBG("Move Inertia cancelled by manual input.");
         }
         // Also cancel scroll inertia to prevent conflict
-        if (data->state.scroll_active) {
+        if (data->state.scroll_active && data->state.scroll_is_inertial) {
             k_work_cancel_delayable(&data->scroll_work);
             data->state.scroll_active = false;
             data->state.scroll_vx = 0;
@@ -282,7 +282,7 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
             LOG_DBG("Scroll Inertia cancelled by manual input.");
         }
         // Also cancel move inertia to prevent conflict
-        if (data->state.move_active) {
+        if (data->state.move_active && data->state.move_is_inertial) {
             k_work_cancel_delayable(&data->move_work);
             data->state.move_active = false;
             data->state.move_vx = 0;
