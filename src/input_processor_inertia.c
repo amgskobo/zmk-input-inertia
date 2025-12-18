@@ -103,14 +103,17 @@ static void move_decay_callback(struct k_work *work) {
     const struct inertia_config *cfg = data->dev->config;
 
     k_mutex_lock(&data->lock, K_FOREVER);
+    if (!data->state.move_active) {
+        k_mutex_unlock(&data->lock);
+        return;
+    }
+
     int16_t vx = data->state.move_vx;
     int16_t vy = data->state.move_vy;
-    k_mutex_unlock(&data->lock);
-
     int16_t next_vx = vx;
     int16_t next_vy = vy;
 
-    // 1. Q8 Factor Scaling
+    // Q8 Factor Scaling
     int16_t decay_factor_q8 = (cfg->move_decay_factor_int * 256) / 100;
 
     // STEP 1: Q8 Fixed-Point Decay
@@ -118,9 +121,8 @@ static void move_decay_callback(struct k_work *work) {
                                      &data->state.move_remainder_x_q8,
                                      &data->state.move_remainder_y_q8);
 
-    // STEP 2: Termination and State Update
+    // STEP 2: Termination Check
     if (abs16(next_vx) <= cfg->move_threshold_stop && abs16(next_vy) <= cfg->move_threshold_stop) {
-        k_mutex_lock(&data->lock, K_FOREVER);
         data->state.move_vx = 0;
         data->state.move_vy = 0;
         data->state.move_active = false;
@@ -133,15 +135,14 @@ static void move_decay_callback(struct k_work *work) {
     }
 
     // Continue inertia
-    k_mutex_lock(&data->lock, K_FOREVER);
     data->state.move_vx = next_vx;
     data->state.move_vy = next_vy;
-    k_mutex_unlock(&data->lock);
 
     zmk_hid_mouse_movement_set(next_vx, next_vy);
     zmk_endpoints_send_mouse_report();
 
     k_work_reschedule(&data->move_work, K_MSEC(cfg->move_interval_ms));
+    k_mutex_unlock(&data->lock);
 }
 
 static void scroll_decay_callback(struct k_work *work) {
@@ -150,14 +151,17 @@ static void scroll_decay_callback(struct k_work *work) {
     const struct inertia_config *cfg = data->dev->config;
 
     k_mutex_lock(&data->lock, K_FOREVER);
+    if (!data->state.scroll_active) {
+        k_mutex_unlock(&data->lock);
+        return;
+    }
+
     int16_t vx = data->state.scroll_vx;
     int16_t vy = data->state.scroll_vy;
-    k_mutex_unlock(&data->lock);
-
     int16_t next_vx = vx;
     int16_t next_vy = vy;
 
-    // 1. Q8 Factor Scaling
+    // Q8 Factor Scaling
     int16_t decay_factor_q8 = (cfg->scroll_decay_factor_int * 256) / 100;
 
     // STEP 1: Q8 Fixed-Point Decay
@@ -165,10 +169,9 @@ static void scroll_decay_callback(struct k_work *work) {
                                      &data->state.scroll_remainder_x_q8,
                                      &data->state.scroll_remainder_y_q8);
 
-    // STEP 2: Termination and State Update
+    // STEP 2: Termination Check
     if (abs16(next_vx) <= cfg->scroll_threshold_stop &&
         abs16(next_vy) <= cfg->scroll_threshold_stop) {
-        k_mutex_lock(&data->lock, K_FOREVER);
         data->state.scroll_vx = 0;
         data->state.scroll_vy = 0;
         data->state.scroll_active = false;
@@ -181,15 +184,14 @@ static void scroll_decay_callback(struct k_work *work) {
     }
 
     // Continue inertia
-    k_mutex_lock(&data->lock, K_FOREVER);
     data->state.scroll_vx = next_vx;
     data->state.scroll_vy = next_vy;
-    k_mutex_unlock(&data->lock);
 
     zmk_hid_mouse_scroll_set(next_vx, next_vy);
     zmk_endpoints_send_mouse_report();
 
     k_work_reschedule(&data->scroll_work, K_MSEC(cfg->scroll_interval_ms));
+    k_mutex_unlock(&data->lock);
 }
 
 /* --- Input Processor Handler (Event-Driven Pipeline) --- */
@@ -213,20 +215,35 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
         int16_t val = (int16_t)event->value;
         if (val == 0) return ZMK_INPUT_PROC_CONTINUE;
 
-        // Cancel existing inertia if moving
+        k_mutex_lock(&data->lock, K_FOREVER);
+
+        // If taking over from active inertia, clear old velocities on both axes
         if (data->state.move_active) {
             k_work_cancel_delayable(&data->move_work);
             data->state.move_active = false;
+            data->state.move_vx = 0;
+            data->state.move_vy = 0;
+            data->state.move_remainder_x_q8 = 0;
+            data->state.move_remainder_y_q8 = 0;
         }
         // Also cancel scroll inertia to prevent conflict
         if (data->state.scroll_active) {
             k_work_cancel_delayable(&data->scroll_work);
             data->state.scroll_active = false;
+            data->state.scroll_vx = 0;
+            data->state.scroll_vy = 0;
+            data->state.scroll_remainder_x_q8 = 0;
+            data->state.scroll_remainder_y_q8 = 0;
         }
 
-        k_mutex_lock(&data->lock, K_FOREVER);
-        if (event->code == INPUT_REL_X) data->state.move_vx = val;
-        if (event->code == INPUT_REL_Y) data->state.move_vy = val;
+        if (event->code == INPUT_REL_X) {
+            data->state.move_vx = val;
+            data->state.move_remainder_x_q8 = 0;
+        }
+        if (event->code == INPUT_REL_Y) {
+            data->state.move_vy = val;
+            data->state.move_remainder_y_q8 = 0;
+        }
 
         if (abs16(data->state.move_vx) >= cfg->move_threshold_start ||
             abs16(data->state.move_vy) >= cfg->move_threshold_start) {
@@ -242,19 +259,34 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
         int16_t val = (int16_t)event->value;
         if (val == 0) return ZMK_INPUT_PROC_CONTINUE;
 
+        k_mutex_lock(&data->lock, K_FOREVER);
+
         if (data->state.scroll_active) {
             k_work_cancel_delayable(&data->scroll_work);
             data->state.scroll_active = false;
+            data->state.scroll_vx = 0;
+            data->state.scroll_vy = 0;
+            data->state.scroll_remainder_x_q8 = 0;
+            data->state.scroll_remainder_y_q8 = 0;
         }
         // Also cancel move inertia to prevent conflict
         if (data->state.move_active) {
             k_work_cancel_delayable(&data->move_work);
             data->state.move_active = false;
+            data->state.move_vx = 0;
+            data->state.move_vy = 0;
+            data->state.move_remainder_x_q8 = 0;
+            data->state.move_remainder_y_q8 = 0;
         }
 
-        k_mutex_lock(&data->lock, K_FOREVER);
-        if (event->code == INPUT_REL_HWHEEL) data->state.scroll_vx = val;
-        if (event->code == INPUT_REL_WHEEL) data->state.scroll_vy = val;
+        if (event->code == INPUT_REL_HWHEEL) {
+            data->state.scroll_vx = val;
+            data->state.scroll_remainder_x_q8 = 0;
+        }
+        if (event->code == INPUT_REL_WHEEL) {
+            data->state.scroll_vy = val;
+            data->state.scroll_remainder_y_q8 = 0;
+        }
 
         if (abs16(data->state.scroll_vx) >= cfg->scroll_threshold_start ||
             abs16(data->state.scroll_vy) >= cfg->scroll_threshold_start) {
