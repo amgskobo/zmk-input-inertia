@@ -44,9 +44,30 @@ properties:
       The minimum velocity magnitude (in dx/dy units) required to continue the inertia calculation. 
       When both current_vx and current_vy drop below this threshold, inertia stops.
       
-  scroll-mode:
-    type: boolean
+  scroll-decay-factor-int:
+    type: int
     required: false
+    default: 85
     description: |
-      If true, movement is reported as horizontal (REL_HWHEEL) and vertical (REL_WHEEL) scrolling
-      instead of standard mouse movement (REL_X, REL_Y).
+      The decay factor for scrolling, expressed as an integer percentage (0-100).
+      
+  scroll-report-interval-ms:
+    type: int
+    required: false
+    default: 65
+    description: |
+      The time interval, in milliseconds (ms), between each scroll decay calculation.
+
+  scroll-threshold-start:
+    type: int
+    required: false
+    default: 2
+    description: |
+      The minimum velocity magnitude required to activate scroll inertia.
+      
+  scroll-threshold-stop:
+    type: int
+    required: false
+    default: 0
+    description: |
+      The minimum velocity magnitude to continue scroll inertia.

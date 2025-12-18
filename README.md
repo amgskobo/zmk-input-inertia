@@ -39,77 +39,59 @@ manifest:
 
 ### **2\. DTS Include**
 
-Add the following line to your keyboard's DTS file (e.g., boards/arm/my\_keyboard/my\_keyboard.dts) to include the module definitions.
+Add the following line to your keyboard's DTS file (e.g., boards/arm/my\_keyboard/my_keyboard.dts) to include the module definitions.
 ```
 #include <input_inertia.dtsi>
 ```
 ### **3\. DTS Instance Configuration**
 
-Adjust the inertia processor instance settings as needed.
+Adjust the inertia processor instance settings in your keymap or board file.
 
-#### **For Mouse Movement (Default)**
+#### **Combined (Dual Inertia) Configuration**
 ```
-&zip_inertia {  
-    // Decay factor (0-100). Lower number stops motion faster.  
-    // Example: 90 (Slightly slow decay)  
-    decay-factor-int = <90>;         
-    // Interval for sending HID reports (milliseconds). Lower number is smoother but increases CPU load.  
-    // !! NOTE: This must be set greater than or equal to the pointing device's polling rate (e.g., 10ms).  
-    // Example: 35ms  
-    report-interval-ms = <35>;       
-    // Minimum velocity threshold required to start inertial movement.  
-    // threshold-start = <15>;       // Default  
-    // Velocity threshold to stop inertial movement.  
-    // threshold-stop = <1>;         // Default  
+&zip_inertia {
+    // --- Mouse Movement Settings ---
+    // Decay factor (0-100). Lower number stops motion faster.
+    decay-factor-int = <90>;
+    // Interval for sending HID reports (ms). 
+    // MUST be >= the device's polling rate.
+    report-interval-ms = <35>;
+    // Minimum velocity to start/stop inertia
+    threshold-start = <15>;
+    threshold-stop = <1>;
+
+    // --- Scrolling Settings ---
+    // Scroll-specific decay factor
+    scroll-decay-factor-int = <85>;
+    // Scroll-specific report interval
+    scroll-report-interval-ms = <65>;
+    // Scroll-specific start/stop thresholds
+    scroll-threshold-start = <2>;
+    scroll-threshold-stop = <0>;
 };
 ```
-#### **For Scrolling (scroll-mode)**
 
-This instance is used to achieve inertial scrolling.
-```
-&zip_inertia_scroll {  
-    // Enable scroll mode  
-    scroll-mode;  
-      
-    // Faster decay (e.g., 85)  
-    decay-factor-int = <85>;         
-    // Report at a longer interval (e.g., 65ms)  
-    report-interval-ms = <65>;  
-    // You might want to start/stop inertia from lower speeds for scrolling  
-    threshold-start = <2>;  
-    threshold-stop = <1>;  
-};
-```
 ### **4\. Integration into the Input Processor Pipeline**
 
-Add the configured inertia processor instance to the input-processors list within your zmk,input-listener node.
+Add the `&zip_inertia` instance to the `input-processors` list of your `zmk,input-listener`. It should be placed at the **end** of the pipeline.
 
-⚠️ **IMPORTANT:** This inertia processor **does not forward** processed mouse or scroll events to the next processor. Therefore, it **must** be placed at the **end** of the input processor pipeline.
-
-#### **Example: Applying Inertia to Mouse Movement**
+#### **Example: Applying Inertia to Mouse & Scroll**
 ```
 / {  
     trackpad_input_listener: trackpad_input_listener {  
         compatible = "zmk,input-listener";  
-        // ... (Other configurations)  
-        input-processors = <&zip_xy_scaler 1 1>, // E.g., a scaler  
-                           <&zip_inertia>;       // Inertia processor MUST be placed last  
-        // ...  
-    };  
-};
-```
-#### **Example: Applying Inertia to Scrolling**
-```
-/ {  
-    trackpad_input_listener: trackpad_input_listener {  
-        // ...  
-        scroller {  
-            // ... (Other configurations)  
-            input-processors = <&zip_xy_transform (INPUT_TRANSFORM_Y_INVERT)>,  
+        
+        // Mouse movement inertia
+        input-processors = <&zip_xy_scaler 1 1>,
+                           <&zip_inertia>;
+
+        // Scrolling inertia
+        scroller {
+            input-processors = <&zip_xy_transform (INPUT_TRANSFORM_Y_INVERT)>,
                                <&zip_xy_scaler 1 10>,
                                <&zip_xy_to_scroll_mapper>,
-                               <&zip_inertia_scroll>; // Inertia processor MUST be placed last  
-        };  
+                               <&zip_inertia>; // Use the same instance
+        };
     };  
 };
 ```
@@ -121,7 +103,10 @@ Add the configured inertia processor instance to the input-processors list withi
 | report-interval-ms | uint16_t  | 35            | HID report interval (in milliseconds) during inertial movement. Must be set **greater than or equal to** the pointing device's polling rate. |
 | threshold-start    | uint16_t  | 15            | Minimum input velocity threshold required to start inertial movement.                                                                        |
 | threshold-stop     | uint16_t  | 1             | Velocity threshold to stop inertial movement (stops when speed is $\\leq$ this value).                                                       |
-| scroll-mode        | boolean | false         | If true, sends scroll HID reports instead of mouse movement.                                                                                 |
+| scroll-decay-factor-int | uint16_t | 85 | Decay factor for scrolling (0-100). Closer to 100 means slower deceleration. |
+| scroll-report-interval-ms | uint16_t | 65 | HID report interval (in milliseconds) during inertial scroll movement. Must be set **greater than or equal to** the pointing device's polling rate. |
+| scroll-threshold-start | uint16_t | 2 | Minimum input velocity threshold required to start inertial scroll movement. |
+| scroll-threshold-stop | uint16_t | 0 | Velocity threshold to stop inertial scroll movement (stops when speed is $\\leq$ this value). |
 
 ## **📖 Technical Details**
 
@@ -178,47 +163,45 @@ DTSインクルードキーボードのDTSファイル（例: boards/arm/my_keyb
 ```
 #include <input_inertia.dtsi>
 ```
+
 ### **3\. DTS Instance Configuration**
 DTSインスタンス設定必要に応じて、慣性プロセッサのインスタンス設定を調整します。
-#### **Example: Applying Inertia to Mouse Movement**
+
+#### **Combined Configuration (Default)**
 ```
 &zip_inertia {
-    // 減衰係数 (0-100)。数値が小さいほど速く停止します。
-    // 例: 90 (ややゆっくり減速)
-    decay-factor-int = <90>;       
-    // HIDレポートを送信する間隔 (ミリ秒)。数値が小さいほどスムーズですが、CPU負荷が増します。
-    // !! 注意: ポインティングデバイスのポーリングレート (例: 10ms) 以上に設定してください。
-    // 例: 35ms
-    report-interval-ms = <35>;     
-    // 慣性移動を開始するための最低速度しきい値。
-    // threshold-start = <15>;       // デフォルト
-    // 慣性移動を停止する速度しきい値。
-    // threshold-stop = <1>;         // デフォルト
-};
-```
-#### **For Scrolling (scroll-mode)**
-このインスタンスは、慣性スクロールを実現するために使用されます。
-```
-&zip_inertia_scroll {
-    // スクロールモードを有効化
-    scroll-mode;
+    // マウス移動の設定
     
-    // より速い減衰 (例: 85)
-    decay-factor-int = <85>;       
-    // より長い間隔でレポート送信 (例: 65ms)
-    report-interval-ms = <65>;
-    // スクロールの場合、低い速度から慣性を開始/停止したい場合があります
-    threshold-start = <2>;
-    threshold-stop = <1>;
+    // 減衰係数 (0-100)。数値が小さいほど速く停止します。
+    decay-factor-int = <90>;       
+    // HIDレポート送信間隔 (ミリ秒)。
+    report-interval-ms = <35>;     
+    // 慣性移動開始しきい値。
+    threshold-start = <15>;       
+    // 慣性移動停止しきい値。
+    threshold-stop = <1>;         
+
+    // スクロールの設定
+
+    // スクロール用減衰係数。
+    scroll-decay-factor-int = <85>;    
+    // スクロール用レポート送信間隔 (ミリ秒)。
+    scroll-report-interval-ms = <35>;  
+    // スクロール用慣性開始しきい値。
+    scroll-threshold-start = <1>;      
+    // スクロール用慣性停止しきい値。
+    scroll-threshold-stop = <1>;       
 };
 ```
+
 ### **4\. Integration into the Input Processor Pipeline**
 
 zmk,input-listenerノード内のinput-processorsリストに、設定した慣性プロセッサのインスタンスを追加します。
 
 ⚠️ 重要:  
 この慣性プロセッサは、処理を完了したマウス・スクロールイベントを次のプロセッサへ転送しません。したがって、必ず入力プロセッサパイプラインの最後に追加してください。
-#### **Example: Applying Inertia to Mouse Movement**
+
+#### **Example**
 ```
 / {
     trackpad_input_listener: trackpad_input_listener {
@@ -226,22 +209,13 @@ zmk,input-listenerノード内のinput-processorsリストに、設定した慣�
         // ... (他の設定)
         input-processors = <&zip_xy_scaler 1 1>, // 例: スケーラー
                            <&zip_inertia>;       // 慣性プロセッサは最後に配置
-        // ...
-    };
-};
-```
-#### **Example: Applying Inertia to Scrolling**
-
-```
-/ {
-    trackpad_input_listener: trackpad_input_listener {
-        // ...
+        
         scroller {
             // ... (他の設定)
             input-processors = <&zip_xy_transform (INPUT_TRANSFORM_Y_INVERT)>,
                                <&zip_xy_scaler 1 10>,
                                <&zip_xy_to_scroll_mapper>,
-                               <&zip_inertia_scroll>; // スクロールモードの慣性プロセッサは最後に配置
+                               <&zip_inertia>; // 同じインスタンスを使用
         };
     };
 };
@@ -254,7 +228,10 @@ zmk,input-listenerノード内のinput-processorsリストに、設定した慣�
 | report-interval-ms | uint16_t  | 35           | 慣性移動中のHIDレポートの送信間隔（ミリ秒）。ポインティングデバイスの**ポーリングレート以上**に設定する必要があります。 |
 | threshold-start    | uint16_t  | 15           | 慣性移動を開始するために必要な入力速度の最小しきい値。                                                                  |
 | threshold-stop     | uint16_t  | 1            | 慣性移動を終了する速度のしきい値（この値以下で停止）。                                                                  |
-| scroll-mode        | boolean | false        | trueの場合、マウス移動ではなくスクロールHIDレポートを送信します。                                                       |
+| scroll-decay-factor-int | uint16_t | 85 | スクロール時の慣性の減衰係数（0-100）。 |
+| scroll-report-interval-ms | uint16_t | 65 | スクロール慣性移動中のHIDレポート送信間隔（ミリ秒）。 |
+| scroll-threshold-start | uint16_t | 2 | スクロール慣性移動を開始するために必要な入力速度の最小しきい値。 |
+| scroll-threshold-stop | uint16_t | 0 | スクロール慣性移動を終了する速度のしきい値。 |
 
 
 ## **📖 技術的な詳細**
