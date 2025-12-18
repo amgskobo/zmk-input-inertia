@@ -1,4 +1,5 @@
 # ZMK Inertia Input Processor
+
 This module adds a **mouse inertia** effect to the ZMK **input processing pipeline**. After a relative movement input (like a trackpad or trackball) stops, it continues the motion according to a configured decay factor, creating a natural inertial scroll or mouse movement.
 
 ### **✨ Features**
@@ -6,20 +7,21 @@ This module adds a **mouse inertia** effect to the ZMK **input processing pipeli
 * **Inertial Movement/Scrolling:** Continues and gradually decelerates movement after an input event (mouse movement or scroll) has finished.  
 * **Q8 Fixed-Point Arithmetic:** Uses Q8 fixed-point arithmetic for inertia decay calculation, balancing **precision** and **performance**.  
 * **Mouse/Scroll Mode:** Allows selection of whether to send Mouse Movement (INPUT\_REL\_X/Y) or Scroll (INPUT\_REL\_HWHEEL/WHEEL) HID reports.  
-*   **Customizable Parameters:** Detailed settings for decay factor, report interval, and start/stop thresholds.
+* **Customizable Parameters:** Detailed settings for decay factor, report interval, and start/stop thresholds.
 
 ### **✅ Zephyr 4.1 Compatibility**
 
 As of ZMK's migration to **Zephyr 4.1**, this module remains fully compatible.
-*   **Input Subsystem:** This module utilizes the standard Zephyr Input Subsystem (`input_event`, `input_processor`), which is the modern standard ZMK is migrating *towards* (replacing the older `kscan` API).
-*   **HWMv2:** The Hardware Model V2 changes primarily affect board definitions. As a driver module, this codebase is unaffected and works seamlessly with HWMv2-based setups.
 
+* **Input Subsystem:** This module utilizes the standard Zephyr Input Subsystem (`input_event`, `input_processor`), which is the modern standard ZMK is migrating *towards* (replacing the older `kscan` API).
+* **HWMv2:** The Hardware Model V2 changes primarily affect board definitions. As a driver module, this codebase is unaffected and works seamlessly with HWMv2-based setups.
 
 ## **🛠️ Installation and Setup**
 
 ### **1\. Integrate the Module**
 
 Add this module to your project's `config/west.yml` file.
+
 ```
 manifest:
   remotes:
@@ -40,14 +42,17 @@ manifest:
 ### **2\. DTS Include**
 
 Add the following line to your keyboard's DTS file (e.g., boards/arm/my\_keyboard/my_keyboard.dts) to include the module definitions.
+
 ```
 #include <input_inertia.dtsi>
 ```
+
 ### **3\. DTS Instance Configuration**
 
 Adjust the inertia processor instance settings in your keymap or board file.
 
 #### **Combined (Dual Inertia) Configuration**
+
 ```
 &zip_inertia {
     // --- Mouse Movement Settings ---
@@ -76,6 +81,7 @@ Adjust the inertia processor instance settings in your keymap or board file.
 Add the `&zip_inertia` instance to the `input-processors` list of your `zmk,input-listener`. It should be placed at the **end** of the pipeline.
 
 #### **Example: Applying Inertia to Mouse & Scroll**
+
 ```
 / {  
     trackpad_input_listener: trackpad_input_listener {  
@@ -95,6 +101,7 @@ Add the `&zip_inertia` instance to the `input-processors` list of your `zmk,inpu
     };  
 };
 ```
+
 ## **⚙️ DTS Property Reference**
 
 | Property Name      | Type    | Default Value | Description                                                                                                                                  |
@@ -121,8 +128,8 @@ The inertia decay calculation uses Q8 fixed-point arithmetic, where:
 
 This approach allows **sub-integer movements** from the decay process to accumulate and eventually be output as an integer value, resulting in a **smoother and more accurate deceleration**.
 
-
 # ZMK Inertia Input Processor (JP)
+
 このモジュールは、ZMKの**入力処理パイプライン**に**マウスの慣性（Inertia）効果を追加します。トラックパッドやトラックボールなどの相対移動入力が終了した後、設定された減衰率に従って動きを継続**させ、自然な慣性スクロールやマウス移動を実現します。
 
 ### **✨ 機能概要**
@@ -135,13 +142,16 @@ This approach allows **sub-integer movements** from the decay process to accumul
 ### **✅ Zephyr 4.1 互換性**
 
 ZMKの**Zephyr 4.1**への移行において、このモジュールは完全な互換性を維持しています。
-*   **入力サブシステム:** 本モジュールは、ZMKが移行を進めている標準のZephyr入力サブシステム（`input_event`, `input_processor`）を使用しています（古い`kscan` APIの代替）。
-*   **HWMv2:** Hardware Model V2の変更は主にボード定義に影響します。ドライバーモジュールである本コードベースは影響を受けず、HWMv2ベースの設定でシームレスに動作します。
 
+* **入力サブシステム:** 本モジュールは、ZMKが移行を進めている標準のZephyr入力サブシステム（`input_event`, `input_processor`）を使用しています（古い`kscan` APIの代替）。
+* **HWMv2:** Hardware Model V2の変更は主にボード定義に影響します。ドライバーモジュールである本コードベースは影響を受けず、HWMv2ベースの設定でシームレスに動作します。
 
 ## **🛠️ インストールと設定**
+
 ### **1\. Integrate the Module**
+
 モジュールの組み込みプロジェクトの`config/west.yml`ファイルに、このモジュールを追加します。
+
 ```
 manifest:
   remotes:
@@ -158,16 +168,21 @@ manifest:
       revision: main
     # END #######
 ```
+
 ### **2\. DTS Include**
+
 DTSインクルードキーボードのDTSファイル（例: boards/arm/my_keyboard/my_keyboard.dts）に以下の行を追加し、モジュール定義をインクルードします。
+
 ```
 #include <input_inertia.dtsi>
 ```
 
 ### **3\. DTS Instance Configuration**
+
 DTSインスタンス設定必要に応じて、慣性プロセッサのインスタンス設定を調整します。
 
 #### **Combined Configuration (Default)**
+
 ```
 &zip_inertia {
     // マウス移動の設定
@@ -202,6 +217,7 @@ zmk,input-listenerノード内のinput-processorsリストに、設定した慣�
 この慣性プロセッサは、処理を完了したマウス・スクロールイベントを次のプロセッサへ転送しません。したがって、必ず入力プロセッサパイプラインの最後に追加してください。
 
 #### **Example**
+
 ```
 / {
     trackpad_input_listener: trackpad_input_listener {
@@ -220,6 +236,7 @@ zmk,input-listenerノード内のinput-processorsリストに、設定した慣�
     };
 };
 ```
+
 ## **⚙️ DTS Property Reference**
 
 | プロパティ名       | 型      | デフォルト値 | 説明                                                                                                                    |
@@ -232,7 +249,6 @@ zmk,input-listenerノード内のinput-processorsリストに、設定した慣�
 | scroll-report-interval-ms | uint16_t | 65 | スクロール慣性移動中のHIDレポート送信間隔（ミリ秒）。 |
 | scroll-threshold-start | uint16_t | 2 | スクロール慣性移動を開始するために必要な入力速度の最小しきい値。 |
 | scroll-threshold-stop | uint16_t | 0 | スクロール慣性移動を終了する速度のしきい値。 |
-
 
 ## **📖 技術的な詳細**
 
