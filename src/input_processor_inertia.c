@@ -107,8 +107,6 @@ static void move_decay_callback(struct k_work *work) {
     k_mutex_lock(&data->lock, K_FOREVER);
     if (!data->state.move_active) {
         k_mutex_unlock(&data->lock);
-        zmk_hid_mouse_movement_set(0, 0);
-        zmk_endpoints_send_mouse_report();
         return;
     }
 
@@ -161,8 +159,6 @@ static void scroll_decay_callback(struct k_work *work) {
     k_mutex_lock(&data->lock, K_FOREVER); 
     if (!data->state.scroll_active) {
         k_mutex_unlock(&data->lock);
-        zmk_hid_mouse_scroll_set(0, 0);
-        zmk_endpoints_send_mouse_report();
         return;
     }
 
@@ -240,6 +236,8 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
             data->state.move_remainder_x_q8 = 0;
             data->state.move_remainder_y_q8 = 0;
             data->state.move_is_inertial = false;
+            zmk_hid_mouse_movement_set(0, 0);
+            zmk_endpoints_send_mouse_report();
             LOG_DBG("Move Inertia cancelled by manual input.");
         }
         // Also cancel scroll inertia to prevent conflict
@@ -251,6 +249,8 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
             data->state.scroll_remainder_x_q8 = 0;
             data->state.scroll_remainder_y_q8 = 0;
             data->state.scroll_is_inertial = false;
+            zmk_hid_mouse_scroll_set(0, 0);
+            zmk_endpoints_send_mouse_report();
             LOG_DBG("Scroll Inertia cancelled by move input.");
         }
 
@@ -283,6 +283,8 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
             data->state.scroll_remainder_x_q8 = 0;
             data->state.scroll_remainder_y_q8 = 0;
             data->state.scroll_is_inertial = false;
+            zmk_hid_mouse_scroll_set(0, 0);
+            zmk_endpoints_send_mouse_report();
             LOG_DBG("Scroll Inertia cancelled by manual input.");
         }
         // Also cancel move inertia to prevent conflict
@@ -294,6 +296,8 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
             data->state.move_remainder_x_q8 = 0;
             data->state.move_remainder_y_q8 = 0;
             data->state.move_is_inertial = false;
+            zmk_hid_mouse_movement_set(0, 0);
+            zmk_endpoints_send_mouse_report();
             LOG_DBG("Move Inertia cancelled by scroll input.");
         }
 
