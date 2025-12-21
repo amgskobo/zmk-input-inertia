@@ -7,7 +7,7 @@ compatible: "zmk,input-processor-inertia"
 
 include: ip_zero_param.yaml
 
-compatible: "zmk,input-processor-inertia"
+
 
 properties:
   decay-factor-int:

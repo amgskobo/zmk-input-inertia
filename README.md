@@ -109,11 +109,11 @@ Add the `&zip_inertia` instance to the `input-processors` list of your `zmk,inpu
 | decay-factor-int   | uint16_t  | 90            | Inertia decay factor (0-100). Closer to 100 means slower deceleration.                                                                       |
 | report-interval-ms | uint16_t  | 35            | HID report interval (in milliseconds) during inertial movement. Must be set **greater than or equal to** the pointing device's polling rate. |
 | threshold-start    | uint16_t  | 15            | Minimum input velocity threshold required to start inertial movement.                                                                        |
-| threshold-stop     | uint16_t  | 1             | Velocity threshold to stop inertial movement (stops when speed is $\\leq$ this value).                                                       |
+| threshold-stop     | uint16_t  | 1             | Velocity threshold to stop inertial movement (stops when speed is $\leq$ this value).                                                        |
 | scroll-decay-factor-int | uint16_t | 85 | Decay factor for scrolling (0-100). Closer to 100 means slower deceleration. |
 | scroll-report-interval-ms | uint16_t | 65 | HID report interval (in milliseconds) during inertial scroll movement. Must be set **greater than or equal to** the pointing device's polling rate. |
 | scroll-threshold-start | uint16_t | 2 | Minimum input velocity threshold required to start inertial scroll movement. |
-| scroll-threshold-stop | uint16_t | 0 | Velocity threshold to stop inertial scroll movement (stops when speed is $\\leq$ this value). |
+| scroll-threshold-stop | uint16_t | 0 | Velocity threshold to stop inertial scroll movement (stops when speed is $\leq$ this value). |
 
 ## **📖 Technical Details**
 
@@ -201,11 +201,11 @@ DTSインスタンス設定必要に応じて、慣性プロセッサのイン�
     // スクロール用減衰係数。
     scroll-decay-factor-int = <85>;    
     // スクロール用レポート送信間隔 (ミリ秒)。
-    scroll-report-interval-ms = <35>;  
+    scroll-report-interval-ms = <65>;  
     // スクロール用慣性開始しきい値。
-    scroll-threshold-start = <1>;      
+    scroll-threshold-start = <2>;      
     // スクロール用慣性停止しきい値。
-    scroll-threshold-stop = <1>;       
+    scroll-threshold-stop = <0>;       
 };
 ```
 

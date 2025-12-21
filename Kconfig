@@ -4,7 +4,7 @@
 DT_COMPAT_ZMK_INPUT_PROCESSOR_INERTIA := zmk,input-processor-inertia
 
 config ZMK_INPUT_PROCESSOR_INERTIA
-		bool
-		default $(dt_compat_enabled,$(DT_COMPAT_ZMK_INPUT_PROCESSOR_INERTIA))
-        depends on ZMK_POINTING
-        depends on (!ZMK_SPLIT || ZMK_SPLIT_ROLE_CENTRAL)
+	bool
+	default $(dt_compat_enabled,$(DT_COMPAT_ZMK_INPUT_PROCESSOR_INERTIA))
+	depends on ZMK_POINTING
+	depends on (!ZMK_SPLIT || ZMK_SPLIT_ROLE_CENTRAL)
