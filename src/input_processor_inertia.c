@@ -8,6 +8,7 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
+#include <zephyr/input/input.h>
 #include <zmk/hid.h>
 #include <zmk/endpoints.h>
 #include <drivers/input_processor.h>
@@ -75,7 +76,7 @@ struct inertia_data {
 #define Q8_VALUE (1 << 8) // 1.0 = 256
 #define Q8_HALF (1 << 7)  // 0.5 = 128
 
-void calculate_decayed_movement_fixed(int16_t in_dx, int16_t in_dy, int16_t decay_factor_q8,
+static void calculate_decayed_movement_fixed(int16_t in_dx, int16_t in_dy, int16_t decay_factor_q8,
                                       int16_t *out_dx, int16_t *out_dy, int16_t *rem_x,
                                       int16_t *rem_y) {
     // 1. True Movement (Q8, including remainder)
