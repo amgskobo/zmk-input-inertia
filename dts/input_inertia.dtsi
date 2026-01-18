@@ -4,14 +4,15 @@
         status = "okay";
         #input-processor-cells = <0>;
 
-        // decay-factor-int = <90>;     
-        // report-interval-ms = <35>;  
-        // threshold-start = <15>;
-        // threshold-stop = <1>;
+        trigger-ms = <35>;
+        move-decay-factor-int = <90>;     
+        move-report-interval-ms = <35>;  
+        move-threshold-start = <15>;
+        move-threshold-stop = <1>;
         
-        // scroll-decay-factor-int = <85>; 
-        // scroll-report-interval-ms = <65>;
-        // scroll-threshold-start = <2>;
-        // scroll-threshold-stop = <0>;
+        scroll-decay-factor-int = <85>; 
+        scroll-report-interval-ms = <65>;
+        scroll-threshold-start = <2>;
+        scroll-threshold-stop = <0>;
     };
 };

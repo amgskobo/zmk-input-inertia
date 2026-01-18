@@ -1,73 +1,66 @@
-# Copyright (c) 2025 @amgskobo
-# SPDX-License-Identifier: MIT
-
 description: ZMK Inertia Input Processor
 
 compatible: "zmk,input-processor-inertia"
 
 include: ip_zero_param.yaml
 
-
-
 properties:
-  decay-factor-int:
+  trigger-ms:
     type: int
-    required: false
-    default: 90
+    required: true
     description: |
-      The decay factor, expressed as an integer percentage (0-100).
-      This determines how quickly the inertia velocity decreases in each interval.
-      A value of 85 means the velocity is multiplied by 0.85 (85/100) per interval.
-      
-  report-interval-ms:
-    type: int
-    required: false
-    default: 35
-    description: |
-      The time interval, in milliseconds (ms), between each decay calculation and 
-      pointer HID report transmission. This should typically match the sensor 
-      polling rate (e.g., 15ms or 16ms).
-  
-  threshold-start:
-    type: int
-    required: false
-    default: 15
-    description: |
-      The minimum velocity magnitude (in dx/dy units) required to activate inertial movement. 
-      Inertia is triggered if the cursor's speed upon release is faster than this threshold.
+      The delay (ms) after manual input stops before inertia starts.
+      IMPORTANT: To prevent "bouncing" or accidental triggers during manual movement,
+      set this to AT LEAST TWICE the sensor's polling interval (e.g., 30ms for a 15ms sensor).
 
-  threshold-stop:
+  move-decay-factor-int:
     type: int
-    required: false
-    default: 1
+    required: true
     description: |
-      The minimum velocity magnitude (in dx/dy units) required to continue the inertia calculation. 
-      When both current_vx and current_vy drop below this threshold, inertia stops.
-      
+      Velocity retention percentage (0-100) per report interval.
+      Higher values (e.g., 95) make the movement feel slipperier and longer-lasting.
+
+  move-report-interval-ms:
+    type: int
+    required: true
+    description: |
+      The time interval (ms) for calculating and sending inertia movement reports.
+      Matching this to your sensor's polling rate (e.g., 15ms) provides the smoothest transition.
+
+  move-threshold-start:
+    type: int
+    required: true
+    description: |
+      Minimum velocity magnitude from the last manual input required to start inertia.
+      Prevents accidental sliding from micro-gestures.
+
+  move-threshold-stop:
+    type: int
+    required: true
+    description: |
+      Minimum velocity magnitude required to continue inertia movement.
+      Once velocity falls below this, the inertia movement stops completely.
+
   scroll-decay-factor-int:
     type: int
-    required: false
-    default: 85
+    required: true
     description: |
-      The decay factor for scrolling, expressed as an integer percentage (0-100).
-      
+      Velocity retention percentage for scrolling. Higher values result in longer scrolls.
+
   scroll-report-interval-ms:
     type: int
-    required: false
-    default: 65
+    required: true
     description: |
-      The time interval, in milliseconds (ms), between each scroll decay calculation.
+      The time interval (ms) for scroll inertia updates.
 
   scroll-threshold-start:
     type: int
-    required: false
-    default: 2
+    required: true
     description: |
-      The minimum velocity magnitude required to activate scroll inertia.
-      
+      Minimum scroll velocity magnitude to activate inertia.
+
   scroll-threshold-stop:
     type: int
-    required: false
-    default: 0
+    required: true
     description: |
-      The minimum velocity magnitude to continue scroll inertia.
+      Minimum scroll velocity to continue inertia.

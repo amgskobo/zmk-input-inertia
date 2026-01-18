@@ -21,6 +21,7 @@ LOG_MODULE_REGISTER(input_inertia, CONFIG_ZMK_LOG_LEVEL);
 #define DEFAULT_INERTIA_INTERVAL_MS 35
 #define DEFAULT_INERTIA_THRESHOLD_START 15
 #define DEFAULT_INERTIA_THRESHOLD_STOP 1
+#define DEFAULT_TRIGGER_MS 35
 
 #define DEFAULT_INERTIA_SCROLL_DECAY_FACTOR_INT 85
 #define DEFAULT_INERTIA_SCROLL_INTERVAL_MS 65
@@ -41,6 +42,8 @@ struct inertia_config {
     uint16_t scroll_interval_ms;
     uint16_t scroll_threshold_start;
     uint16_t scroll_threshold_stop;
+
+    uint16_t trigger_ms;
 };
 
 struct inertia_state {
@@ -264,9 +267,9 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
             abs16(data->state.move_vy) >= cfg->move_threshold_start) {
             data->state.move_active = true;
             data->state.move_is_inertial = false; 
-            k_work_reschedule(&data->move_work, K_MSEC(cfg->move_interval_ms));
-            LOG_DBG("Move Inertia triggered. x %d, y %d", data->state.move_vx,
-                    data->state.move_vy);
+            k_work_reschedule(&data->move_work, K_MSEC(cfg->trigger_ms));
+            LOG_DBG("Move Inertia triggered. x %d, y %d (trigger %d ms)", data->state.move_vx,
+                    data->state.move_vy, cfg->trigger_ms);
         }
         k_mutex_unlock(&data->lock);
     }
@@ -309,9 +312,9 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
             abs16(data->state.scroll_vy) >= cfg->scroll_threshold_start) {
             data->state.scroll_active = true;
             data->state.scroll_is_inertial = false;
-            k_work_reschedule(&data->scroll_work, K_MSEC(cfg->scroll_interval_ms));
-            LOG_DBG("Scroll Inertia triggered. h %d, v %d", data->state.scroll_vx,
-                    data->state.scroll_vy);
+            k_work_reschedule(&data->scroll_work, K_MSEC(cfg->trigger_ms));
+            LOG_DBG("Scroll Inertia triggered. h %d, v %d (trigger %d ms)", data->state.scroll_vx,
+                    data->state.scroll_vy, cfg->trigger_ms);
         }
         k_mutex_unlock(&data->lock);
     }
@@ -354,11 +357,13 @@ static const struct zmk_input_processor_driver_api inertia_driver_api = {
     static struct inertia_data processor_inertia_data_##n = {};                                    \
     static const struct inertia_config processor_inertia_config_##n = {                            \
         .move_decay_factor_int =                                                                   \
-            DT_INST_PROP_OR(n, decay_factor_int, DEFAULT_INERTIA_DECAY_FACTOR_INT),                \
-        .move_interval_ms = DT_INST_PROP_OR(n, report_interval_ms, DEFAULT_INERTIA_INTERVAL_MS),   \
+            DT_INST_PROP_OR(n, move_decay_factor_int, DEFAULT_INERTIA_DECAY_FACTOR_INT),           \
+        .move_interval_ms =                                                                        \
+            DT_INST_PROP_OR(n, move_report_interval_ms, DEFAULT_INERTIA_INTERVAL_MS),              \
         .move_threshold_start =                                                                    \
-            DT_INST_PROP_OR(n, threshold_start, DEFAULT_INERTIA_THRESHOLD_START),                  \
-        .move_threshold_stop = DT_INST_PROP_OR(n, threshold_stop, DEFAULT_INERTIA_THRESHOLD_STOP), \
+            DT_INST_PROP_OR(n, move_threshold_start, DEFAULT_INERTIA_THRESHOLD_START),             \
+        .move_threshold_stop =                                                                     \
+            DT_INST_PROP_OR(n, move_threshold_stop, DEFAULT_INERTIA_THRESHOLD_STOP),               \
                                                                                                    \
         .scroll_decay_factor_int =                                                                 \
             DT_INST_PROP_OR(n, scroll_decay_factor_int, DEFAULT_INERTIA_SCROLL_DECAY_FACTOR_INT),  \
@@ -368,6 +373,7 @@ static const struct zmk_input_processor_driver_api inertia_driver_api = {
             DT_INST_PROP_OR(n, scroll_threshold_start, DEFAULT_INERTIA_SCROLL_THRESHOLD_START),    \
         .scroll_threshold_stop =                                                                   \
             DT_INST_PROP_OR(n, scroll_threshold_stop, DEFAULT_INERTIA_SCROLL_THRESHOLD_STOP),      \
+        .trigger_ms = DT_INST_PROP_OR(n, trigger_ms, DEFAULT_TRIGGER_MS),                          \
     };                                                                                             \
     DEVICE_DT_INST_DEFINE(n, inertia_init, NULL, &processor_inertia_data_##n,                      \
                           &processor_inertia_config_##n, POST_KERNEL,                              \
