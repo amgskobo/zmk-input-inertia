@@ -15,7 +15,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/util.h>
 
-LOG_MODULE_REGISTER(input_inertia, CONFIG_ZMK_LOG_LEVEL);
+LOG_MODULE_REGISTER(input_processor_inertia, CONFIG_ZMK_LOG_LEVEL);
 
 #define DEFAULT_INERTIA_DECAY_FACTOR_INT 90
 #define DEFAULT_INERTIA_INTERVAL_MS 35
