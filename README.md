@@ -35,7 +35,7 @@ manifest:
 Add the following line to your keyboard's DTS file.
 
 ```dts
-#include <input_inertia.dtsi>
+#include <zmk-input-inertia/input/processor/input_inertia.dtsi>
 ```
 
 ### **3\. DTS Instance Configuration**

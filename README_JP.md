@@ -35,7 +35,7 @@ manifest:
 キーボードのDTSファイル（例: `boards/arm/my_keyboard/my_keyboard.dts`）に以下の行を追加します。
 
 ```dts
-#include <input_inertia.dtsi>
+#include <zmk-input-inertia/input/processor/input_inertia.dtsi>
 ```
 
 ### 3. DTSインスタンス設定
