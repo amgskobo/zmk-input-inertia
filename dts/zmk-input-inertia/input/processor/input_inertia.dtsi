@@ -1,18 +1,20 @@
 / {
-    zip_inertia: zip_inertia {
-        compatible = "zmk,input-processor-inertia"; 
-        status = "okay";
-        #input-processor-cells = <0>;
+    input_processors {
+        zip_inertia: zip_inertia {
+            compatible = "zmk,input-processor-inertia";
+            status = "okay";
+            #input-processor-cells = <0>;
 
-        trigger-ms = <35>;
-        move-decay-factor-int = <90>;     
-        move-report-interval-ms = <35>;  
-        move-threshold-start = <15>;
-        move-threshold-stop = <1>;
-        
-        scroll-decay-factor-int = <85>; 
-        scroll-report-interval-ms = <65>;
-        scroll-threshold-start = <2>;
-        scroll-threshold-stop = <0>;
+            trigger-ms = <35>;
+            move-decay-factor-int = <90>;
+            move-report-interval-ms = <35>;
+            move-threshold-start = <15>;
+            move-threshold-stop = <1>;
+
+            scroll-decay-factor-int = <85>;
+            scroll-report-interval-ms = <65>;
+            scroll-threshold-start = <2>;
+            scroll-threshold-stop = <0>;
+        };
     };
 };
