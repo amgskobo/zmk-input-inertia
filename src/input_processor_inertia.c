@@ -148,11 +148,14 @@ static void move_decay_callback(struct k_work *work) {
     data->state.move_vy = next_vy;
     data->state.move_is_inertial = true;
 
-    zmk_hid_mouse_movement_set(next_vx, next_vy);
-    zmk_endpoint_send_mouse_report();
-
     k_work_reschedule(&data->move_work, K_MSEC(cfg->move_interval_ms));
     k_mutex_unlock(&data->lock);
+
+    // Call HID outside the lock to avoid blocking other input threads
+    zmk_hid_mouse_movement_set(next_vx, next_vy);
+    zmk_endpoint_send_mouse_report();
+    // Clear HID state to prevent conflict and jumping cursor when other ZMK inputs (e.g., clicks) occur
+    zmk_hid_mouse_movement_set(0, 0);
 }
 
 static void scroll_decay_callback(struct k_work *work) {
@@ -201,11 +204,14 @@ static void scroll_decay_callback(struct k_work *work) {
     data->state.scroll_vy = next_vy;
     data->state.scroll_is_inertial = true;
 
-    zmk_hid_mouse_scroll_set(next_vx, next_vy);
-    zmk_endpoint_send_mouse_report();
-
     k_work_reschedule(&data->scroll_work, K_MSEC(cfg->scroll_interval_ms));
     k_mutex_unlock(&data->lock);
+
+    // Call HID outside the lock to avoid blocking other input threads
+    zmk_hid_mouse_scroll_set(next_vx, next_vy);
+    zmk_endpoint_send_mouse_report();
+    // Clear HID state to prevent scroll remnants from interfering with other inputs
+    zmk_hid_mouse_scroll_set(0, 0);
 }
 
 /* --- Input Processor Handler (Event-Driven Pipeline) --- */
@@ -240,8 +246,8 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
             data->state.move_remainder_x_q8 = 0;
             data->state.move_remainder_y_q8 = 0;
             data->state.move_is_inertial = false;
+            // Just clear HID state. The standard ZMK pipeline will handle sending the current manual event.
             zmk_hid_mouse_movement_set(0, 0);
-            zmk_endpoint_send_mouse_report();
             LOG_DBG("Move Inertia cancelled by manual input.");
         }
         // Also cancel scroll inertia to prevent conflict
@@ -254,7 +260,6 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
             data->state.scroll_remainder_y_q8 = 0;
             data->state.scroll_is_inertial = false;
             zmk_hid_mouse_scroll_set(0, 0);
-            zmk_endpoint_send_mouse_report();
             LOG_DBG("Scroll Inertia cancelled by move input.");
         }
 
@@ -263,6 +268,8 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
 
         // Manual movement is NOT marked as is_inertial yet.
         // It becomes is_inertial only when the background timer takes over.
+        // NOTE: If the finger stops and hardware sends slow events (e.g., 0), the timer is NOT rescheduled.
+        // When the timer eventually expires, the low velocity is caught and inertia safely cancels.
         if (abs16(data->state.move_vx) >= cfg->move_threshold_start ||
             abs16(data->state.move_vy) >= cfg->move_threshold_start) {
             data->state.move_active = true;
@@ -288,7 +295,6 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
             data->state.scroll_remainder_y_q8 = 0;
             data->state.scroll_is_inertial = false;
             zmk_hid_mouse_scroll_set(0, 0);
-            zmk_endpoint_send_mouse_report();
             LOG_DBG("Scroll Inertia cancelled by manual input.");
         }
         // Also cancel move inertia to prevent conflict
@@ -301,13 +307,13 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
             data->state.move_remainder_y_q8 = 0;
             data->state.move_is_inertial = false;
             zmk_hid_mouse_movement_set(0, 0);
-            zmk_endpoint_send_mouse_report();
             LOG_DBG("Move Inertia cancelled by scroll input.");
         }
 
         if (event->code == INPUT_REL_HWHEEL) data->state.scroll_vx = val;
         if (event->code == INPUT_REL_WHEEL) data->state.scroll_vy = val;
 
+        // Same logic: slow stops will bypass rescheduling, safely canceling inertia on timer expiry.
         if (abs16(data->state.scroll_vx) >= cfg->scroll_threshold_start ||
             abs16(data->state.scroll_vy) >= cfg->scroll_threshold_start) {
             data->state.scroll_active = true;
