@@ -65,7 +65,7 @@ Add the following line to your keyboard's DTS file.
 
 Add `&zip_inertia` to the **end** of your `input-processors` list.
 
-This inertia processor will not forward additional mouse or scroll events during inertia to the next input processor, so it is recommended that you always place it at the end of the input processor pipeline to avoid malfunctions.
+This inertia processor sends synthesized inertia events directly to the HID endpoint, bypassing any subsequent input processors. Therefore, it is critical to always place it at the **end** of the input processors pipeline so it operates on the final processed values (e.g., after scaling or scroll mapping) to avoid malfunctions.
 
 ```dts
 &trackball_listener {
