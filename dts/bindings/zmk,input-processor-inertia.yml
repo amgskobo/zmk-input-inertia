@@ -64,3 +64,9 @@ properties:
     required: true
     description: |
       Minimum scroll velocity to continue inertia.
+
+  cancel-scroll-inertia-on-ctrl:
+    type: boolean
+    description: |
+      When set to true, stop active scroll inertia and suppress new scroll inertia while Ctrl is pressed.
+      This is useful to avoid accidental host-side zoom actions from Ctrl+wheel.
