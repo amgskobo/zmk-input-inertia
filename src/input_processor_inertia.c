@@ -50,6 +50,8 @@ struct inertia_state {
     // Mouse movement state
     int16_t move_vx;
     int16_t move_vy;
+    int16_t move_ema_vx;
+    int16_t move_ema_vy;
     int16_t move_remainder_x_q8;
     int16_t move_remainder_y_q8;
     bool move_active;
@@ -58,6 +60,8 @@ struct inertia_state {
     // Scroll state
     int16_t scroll_vx;
     int16_t scroll_vy;
+    int16_t scroll_ema_vx;
+    int16_t scroll_ema_vy;
     int16_t scroll_remainder_x_q8;
     int16_t scroll_remainder_y_q8;
     bool scroll_active;
@@ -114,8 +118,8 @@ static void move_decay_callback(struct k_work *work) {
         return;
     }
 
-    int16_t vx = data->state.move_vx;
-    int16_t vy = data->state.move_vy;
+    int16_t vx = data->state.move_ema_vx;
+    int16_t vy = data->state.move_ema_vy;
     int16_t next_vx = vx;
     int16_t next_vy = vy;
 
@@ -131,6 +135,8 @@ static void move_decay_callback(struct k_work *work) {
     if (abs16(next_vx) <= cfg->move_threshold_stop && abs16(next_vy) <= cfg->move_threshold_stop) {
         data->state.move_vx = 0;
         data->state.move_vy = 0;
+        data->state.move_ema_vx = 0;
+        data->state.move_ema_vy = 0;
         data->state.move_remainder_x_q8 = 0;
         data->state.move_remainder_y_q8 = 0;
         data->state.move_active = false;
@@ -146,6 +152,8 @@ static void move_decay_callback(struct k_work *work) {
     // Continue inertia
     data->state.move_vx = next_vx;
     data->state.move_vy = next_vy;
+    data->state.move_ema_vx = next_vx;
+    data->state.move_ema_vy = next_vy;
     data->state.move_is_inertial = true;
 
     k_work_reschedule(&data->move_work, K_MSEC(cfg->move_interval_ms));
@@ -169,8 +177,8 @@ static void scroll_decay_callback(struct k_work *work) {
         return;
     }
 
-    int16_t vx = data->state.scroll_vx;
-    int16_t vy = data->state.scroll_vy;
+    int16_t vx = data->state.scroll_ema_vx;
+    int16_t vy = data->state.scroll_ema_vy;
     int16_t next_vx = vx;
     int16_t next_vy = vy;
 
@@ -187,6 +195,8 @@ static void scroll_decay_callback(struct k_work *work) {
         abs16(next_vy) <= cfg->scroll_threshold_stop) {
         data->state.scroll_vx = 0;
         data->state.scroll_vy = 0;
+        data->state.scroll_ema_vx = 0;
+        data->state.scroll_ema_vy = 0;
         data->state.scroll_remainder_x_q8 = 0;
         data->state.scroll_remainder_y_q8 = 0;
         data->state.scroll_active = false;
@@ -202,6 +212,8 @@ static void scroll_decay_callback(struct k_work *work) {
     // Continue inertia
     data->state.scroll_vx = next_vx;
     data->state.scroll_vy = next_vy;
+    data->state.scroll_ema_vx = next_vx;
+    data->state.scroll_ema_vy = next_vy;
     data->state.scroll_is_inertial = true;
 
     k_work_reschedule(&data->scroll_work, K_MSEC(cfg->scroll_interval_ms));
@@ -243,6 +255,8 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
             data->state.move_active = false;
             data->state.move_vx = 0;
             data->state.move_vy = 0;
+            data->state.move_ema_vx = 0;
+            data->state.move_ema_vy = 0;
             data->state.move_remainder_x_q8 = 0;
             data->state.move_remainder_y_q8 = 0;
             data->state.move_is_inertial = false;
@@ -256,6 +270,8 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
             data->state.scroll_active = false;
             data->state.scroll_vx = 0;
             data->state.scroll_vy = 0;
+            data->state.scroll_ema_vx = 0;
+            data->state.scroll_ema_vy = 0;
             data->state.scroll_remainder_x_q8 = 0;
             data->state.scroll_remainder_y_q8 = 0;
             data->state.scroll_is_inertial = false;
@@ -263,8 +279,14 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
             LOG_DBG("Scroll Inertia cancelled by move input.");
         }
 
-        if (event->code == INPUT_REL_X) data->state.move_vx = val;
-        if (event->code == INPUT_REL_Y) data->state.move_vy = val;
+        if (event->code == INPUT_REL_X) {
+            data->state.move_vx = val;
+            data->state.move_ema_vx = (int16_t)((val + data->state.move_ema_vx) >> 1);
+        }
+        if (event->code == INPUT_REL_Y) {
+            data->state.move_vy = val;
+            data->state.move_ema_vy = (int16_t)((val + data->state.move_ema_vy) >> 1);
+        }
 
         // Manual movement is NOT marked as is_inertial yet.
         // It becomes is_inertial only when the background timer takes over.
@@ -291,6 +313,8 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
             data->state.scroll_active = false;
             data->state.scroll_vx = 0;
             data->state.scroll_vy = 0;
+            data->state.scroll_ema_vx = 0;
+            data->state.scroll_ema_vy = 0;
             data->state.scroll_remainder_x_q8 = 0;
             data->state.scroll_remainder_y_q8 = 0;
             data->state.scroll_is_inertial = false;
@@ -303,6 +327,8 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
             data->state.move_active = false;
             data->state.move_vx = 0;
             data->state.move_vy = 0;
+            data->state.move_ema_vx = 0;
+            data->state.move_ema_vy = 0;
             data->state.move_remainder_x_q8 = 0;
             data->state.move_remainder_y_q8 = 0;
             data->state.move_is_inertial = false;
@@ -310,8 +336,14 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
             LOG_DBG("Move Inertia cancelled by scroll input.");
         }
 
-        if (event->code == INPUT_REL_HWHEEL) data->state.scroll_vx = val;
-        if (event->code == INPUT_REL_WHEEL) data->state.scroll_vy = val;
+        if (event->code == INPUT_REL_HWHEEL) {
+            data->state.scroll_vx = val;
+            data->state.scroll_ema_vx = (int16_t)((val + data->state.scroll_ema_vx) >> 1);
+        }
+        if (event->code == INPUT_REL_WHEEL) {
+            data->state.scroll_vy = val;
+            data->state.scroll_ema_vy = (int16_t)((val + data->state.scroll_ema_vy) >> 1);
+        }
 
         // Same logic: slow stops will bypass rescheduling, safely canceling inertia on timer expiry.
         if (abs16(data->state.scroll_vx) >= cfg->scroll_threshold_start ||
@@ -335,6 +367,8 @@ static int inertia_init(const struct device *dev) {
     // Reset move state
     data->state.move_vx = 0;
     data->state.move_vy = 0;
+    data->state.move_ema_vx = 0;
+    data->state.move_ema_vy = 0;
     data->state.move_remainder_x_q8 = 0;
     data->state.move_remainder_y_q8 = 0;
     data->state.move_active = false;
@@ -343,6 +377,8 @@ static int inertia_init(const struct device *dev) {
     // Reset scroll state
     data->state.scroll_vx = 0;
     data->state.scroll_vy = 0;
+    data->state.scroll_ema_vx = 0;
+    data->state.scroll_ema_vy = 0;
     data->state.scroll_remainder_x_q8 = 0;
     data->state.scroll_remainder_y_q8 = 0;
     data->state.scroll_active = false;
