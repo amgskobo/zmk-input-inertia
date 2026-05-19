@@ -321,6 +321,17 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
 
         k_mutex_lock(&data->lock, K_FOREVER);
 
+        if (cfg->cancel_scroll_inertia_on_ctrl && ctrl_mod_is_active()) {
+            if (data->state.scroll_active) {
+                k_work_cancel_delayable(&data->scroll_work);
+            }
+            clear_scroll_inertia_state(data);
+            zmk_hid_mouse_scroll_set(0, 0);
+            k_mutex_unlock(&data->lock);
+            LOG_DBG("Scroll Inertia cancelled while Ctrl-modified scroll input is active.");
+            return ZMK_INPUT_PROC_CONTINUE;
+        }
+
         if (data->state.scroll_active && data->state.scroll_is_inertial) {
             k_work_cancel_delayable(&data->scroll_work);
             clear_scroll_inertia_state(data);
@@ -352,9 +363,8 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
         }
 
         // Same logic: slow stops will bypass rescheduling, safely canceling inertia on timer expiry.
-        if (!(cfg->cancel_scroll_inertia_on_ctrl && ctrl_mod_is_active()) &&
-            (abs16(data->state.scroll_vx) >= cfg->scroll_threshold_start ||
-             abs16(data->state.scroll_vy) >= cfg->scroll_threshold_start)) {
+        if (abs16(data->state.scroll_vx) >= cfg->scroll_threshold_start ||
+            abs16(data->state.scroll_vy) >= cfg->scroll_threshold_start) {
             data->state.scroll_active = true;
             data->state.scroll_is_inertial = false;
             k_work_reschedule(&data->scroll_work, K_MSEC(cfg->trigger_ms));
