@@ -45,7 +45,7 @@ Add the following line to your keyboard's DTS file.
 &zip_inertia {
     // Initiation delay (Wait time after input stops before starting inertia)
     // Recommended: AT LEAST 2x your sensor's polling interval (e.g., 30ms for 15ms sensor).
-    trigger-ms = <35>; 
+    trigger-ms = <35>;
 
     // --- Mouse Movement Settings ---
     move-decay-factor-int = <90>;       // Decay rate (0-100)
@@ -58,6 +58,9 @@ Add the following line to your keyboard's DTS file.
     scroll-report-interval-ms = <65>;  // Scroll report interval (ms)
     scroll-threshold-start = <2>;      // Start threshold (pix/report)
     scroll-threshold-stop = <0>;       // Stop threshold (pix/report)
+
+    // Optional: stop/suppress scroll inertia while Ctrl is pressed.
+    cancel-scroll-inertia-on-ctrl;
 };
 ```
 
