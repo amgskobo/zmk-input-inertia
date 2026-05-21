@@ -46,7 +46,7 @@ manifest:
 ```dts
 &zip_inertia {
     // 慣性が始まるまでの待ち時間 (推奨: センサーのポーリングレートの2倍以上)
-    trigger-ms = <35>; 
+    trigger-ms = <35>;
 
     // --- マウス移動の設定 ---
     move-decay-factor-int = <90>;       // 減衰率 (0-100)
@@ -59,6 +59,9 @@ manifest:
     scroll-report-interval-ms = <65>;  // スクロールレポート間隔 (ms)
     scroll-threshold-start = <2>;      // 慣性が発動する最小スクロール量 (pix/report)
     scroll-threshold-stop = <0>;       // 慣性が停止するスクロール量 (pix/report)
+
+    // 任意: Ctrl 押下中はスクロール慣性を停止/抑止する
+    cancel-scroll-inertia-on-ctrl;
 };
 ```
 

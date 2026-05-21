@@ -9,6 +9,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/input/input.h>
+#include <dt-bindings/zmk/modifiers.h>
 #include <zmk/hid.h>
 #include <zmk/endpoints.h>
 #include <drivers/input_processor.h>
@@ -42,6 +43,7 @@ struct inertia_config {
     uint16_t scroll_interval_ms;
     uint16_t scroll_threshold_start;
     uint16_t scroll_threshold_stop;
+    bool cancel_scroll_inertia_on_ctrl;
 
     uint16_t trigger_ms;
 };
@@ -107,6 +109,21 @@ static void calculate_decayed_movement_fixed(int16_t in_dx, int16_t in_dy, int16
 }
 // ====================================================================
 
+static bool ctrl_mod_is_active(void) {
+    return (zmk_hid_get_keyboard_report()->body.modifiers & (MOD_LCTL | MOD_RCTL)) != 0;
+}
+
+static void clear_scroll_inertia_state(struct inertia_data *data) {
+    data->state.scroll_vx = 0;
+    data->state.scroll_vy = 0;
+    data->state.scroll_ema_vx = 0;
+    data->state.scroll_ema_vy = 0;
+    data->state.scroll_remainder_x_q8 = 0;
+    data->state.scroll_remainder_y_q8 = 0;
+    data->state.scroll_active = false;
+    data->state.scroll_is_inertial = false;
+}
+
 static void move_decay_callback(struct k_work *work) {
     struct k_work_delayable *d_work = k_work_delayable_from_work(work);
     struct inertia_data *data = CONTAINER_OF(d_work, struct inertia_data, move_work);
@@ -171,9 +188,19 @@ static void scroll_decay_callback(struct k_work *work) {
     struct inertia_data *data = CONTAINER_OF(d_work, struct inertia_data, scroll_work);
     const struct inertia_config *cfg = data->dev->config;
 
-    k_mutex_lock(&data->lock, K_FOREVER); 
+    k_mutex_lock(&data->lock, K_FOREVER);
     if (!data->state.scroll_active) {
         k_mutex_unlock(&data->lock);
+        return;
+    }
+
+    if (cfg->cancel_scroll_inertia_on_ctrl && ctrl_mod_is_active()) {
+        clear_scroll_inertia_state(data);
+        k_mutex_unlock(&data->lock);
+
+        zmk_hid_mouse_scroll_set(0, 0);
+        zmk_endpoint_send_mouse_report();
+        LOG_DBG("Scroll Inertia cancelled while Ctrl is pressed.");
         return;
     }
 
@@ -193,14 +220,7 @@ static void scroll_decay_callback(struct k_work *work) {
     // STEP 2: Termination Check
     if (abs16(next_vx) <= cfg->scroll_threshold_stop &&
         abs16(next_vy) <= cfg->scroll_threshold_stop) {
-        data->state.scroll_vx = 0;
-        data->state.scroll_vy = 0;
-        data->state.scroll_ema_vx = 0;
-        data->state.scroll_ema_vy = 0;
-        data->state.scroll_remainder_x_q8 = 0;
-        data->state.scroll_remainder_y_q8 = 0;
-        data->state.scroll_active = false;
-        data->state.scroll_is_inertial = false;
+        clear_scroll_inertia_state(data);
         k_mutex_unlock(&data->lock);
 
         zmk_hid_mouse_scroll_set(0, 0);
@@ -267,14 +287,7 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
         // Also cancel scroll inertia to prevent conflict
         if (data->state.scroll_active && data->state.scroll_is_inertial) {
             k_work_cancel_delayable(&data->scroll_work);
-            data->state.scroll_active = false;
-            data->state.scroll_vx = 0;
-            data->state.scroll_vy = 0;
-            data->state.scroll_ema_vx = 0;
-            data->state.scroll_ema_vy = 0;
-            data->state.scroll_remainder_x_q8 = 0;
-            data->state.scroll_remainder_y_q8 = 0;
-            data->state.scroll_is_inertial = false;
+            clear_scroll_inertia_state(data);
             zmk_hid_mouse_scroll_set(0, 0);
             LOG_DBG("Scroll Inertia cancelled by move input.");
         }
@@ -295,7 +308,7 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
         if (abs16(data->state.move_vx) >= cfg->move_threshold_start ||
             abs16(data->state.move_vy) >= cfg->move_threshold_start) {
             data->state.move_active = true;
-            data->state.move_is_inertial = false; 
+            data->state.move_is_inertial = false;
             k_work_reschedule(&data->move_work, K_MSEC(cfg->trigger_ms));
             LOG_DBG("Move Inertia triggered. x %d, y %d (trigger %d ms)", data->state.move_vx,
                     data->state.move_vy, cfg->trigger_ms);
@@ -308,16 +321,20 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
 
         k_mutex_lock(&data->lock, K_FOREVER);
 
+        if (cfg->cancel_scroll_inertia_on_ctrl && ctrl_mod_is_active()) {
+            if (data->state.scroll_active) {
+                k_work_cancel_delayable(&data->scroll_work);
+            }
+            clear_scroll_inertia_state(data);
+            zmk_hid_mouse_scroll_set(0, 0);
+            k_mutex_unlock(&data->lock);
+            LOG_DBG("Scroll Inertia cancelled while Ctrl-modified scroll input is active.");
+            return ZMK_INPUT_PROC_CONTINUE;
+        }
+
         if (data->state.scroll_active && data->state.scroll_is_inertial) {
             k_work_cancel_delayable(&data->scroll_work);
-            data->state.scroll_active = false;
-            data->state.scroll_vx = 0;
-            data->state.scroll_vy = 0;
-            data->state.scroll_ema_vx = 0;
-            data->state.scroll_ema_vy = 0;
-            data->state.scroll_remainder_x_q8 = 0;
-            data->state.scroll_remainder_y_q8 = 0;
-            data->state.scroll_is_inertial = false;
+            clear_scroll_inertia_state(data);
             zmk_hid_mouse_scroll_set(0, 0);
             LOG_DBG("Scroll Inertia cancelled by manual input.");
         }
@@ -415,6 +432,8 @@ static const struct zmk_input_processor_driver_api inertia_driver_api = {
             DT_INST_PROP_OR(n, scroll_threshold_start, DEFAULT_INERTIA_SCROLL_THRESHOLD_START),    \
         .scroll_threshold_stop =                                                                   \
             DT_INST_PROP_OR(n, scroll_threshold_stop, DEFAULT_INERTIA_SCROLL_THRESHOLD_STOP),      \
+        .cancel_scroll_inertia_on_ctrl =                                                           \
+            DT_INST_PROP_OR(n, cancel_scroll_inertia_on_ctrl, false),                              \
         .trigger_ms = DT_INST_PROP_OR(n, trigger_ms, DEFAULT_TRIGGER_MS),                          \
     };                                                                                             \
     DEVICE_DT_INST_DEFINE(n, inertia_init, NULL, &processor_inertia_data_##n,                      \
