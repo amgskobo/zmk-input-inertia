@@ -123,3 +123,31 @@ This module uses `calculate_decayed_movement_fixed` (Q8 fixed-point arithmetic) 
 
 Many embedded MCUs used with ZMK have limited hardware support for floating-point arithmetic.
 This module performs all calculations using only **integer addition, multiplication, and bit shifting**, completing processing in significantly fewer CPU cycles compared to floating-point operations. This minimizes input latency even when using high-polling-rate sensors.
+
+## Configuration Reference
+
+| Property | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `trigger-ms` | int | yes | Delay after manual input stops before inertia starts. Set to at least twice the sensor's polling interval. |
+| `move-decay-factor-int` | int | yes | Velocity retained per report interval, as a percentage. Higher is slipperier. |
+| `move-report-interval-ms` | int | yes | Interval between inertia movement reports. Matching the sensor's polling rate gives the smoothest transition. |
+| `move-threshold-start` | int | yes | Minimum velocity from the last manual input needed to start inertia. |
+| `move-threshold-stop` | int | yes | Velocity below which inertia stops. |
+| `scroll-decay-factor-int` | int | yes | Velocity retained per report interval while scrolling. |
+| `scroll-report-interval-ms` | int | yes | Interval between scroll inertia updates. |
+| `scroll-threshold-start` | int | yes | Minimum scroll velocity needed to start inertia. |
+| `scroll-threshold-stop` | int | yes | Scroll velocity below which inertia stops. |
+| `cancel-scroll-inertia-on-ctrl` | bool | no | Stop active scroll inertia and suppress new scroll inertia while Ctrl is held, so Ctrl+wheel does not zoom the host by accident. |
+
+### Decay factor range
+
+The decay factors are percentages, and they are **not range-checked** at build or run time - the value given is used as written:
+
+| Value | Effect |
+| :--- | :--- |
+| `0` | inertia stops on the first report |
+| `1`-`99` | the intended range: velocity decays, faster at lower values |
+| `100` | velocity is retained exactly, so inertia never stops on its own |
+| `> 100` | velocity **grows** on every report and the pointer runs away until it saturates |
+
+Keep both decay factors below 100.
