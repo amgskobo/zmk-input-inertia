@@ -31,6 +31,24 @@ LOG_MODULE_REGISTER(input_processor_inertia, CONFIG_ZMK_LOG_LEVEL);
 
 #define abs16(x) ((x) < 0 ? -(x) : (x))
 
+/*
+ * Halve, rounding to nearest and away from zero on a tie.
+ *
+ * The running average below has a fixed point at the velocity being fed into
+ * it, and only this rounding lands on it. An arithmetic shift floors, so it
+ * settles a count short going one way and exactly on the mark going the other;
+ * truncation towards zero is even-handed but settles a count short both ways.
+ *
+ * A count matters here, because this value is the speed inertia launches at
+ * and the glide that follows is roughly proportional to it. At the low speeds
+ * where inertia is used for fine control, one count is a large share of the
+ * total, and under the shift a flick one way coasted noticeably further than
+ * the same flick back.
+ */
+static inline int16_t inertia_half(int32_t sum) {
+    return (int16_t)(sum >= 0 ? (sum + 1) / 2 : -((-sum + 1) / 2));
+}
+
 struct inertia_config {
     // Mouse movement config
     uint16_t move_decay_factor_int;
@@ -294,11 +312,11 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
 
         if (event->code == INPUT_REL_X) {
             data->state.move_vx = val;
-            data->state.move_ema_vx = (int16_t)((val + data->state.move_ema_vx) >> 1);
+            data->state.move_ema_vx = inertia_half(val + data->state.move_ema_vx);
         }
         if (event->code == INPUT_REL_Y) {
             data->state.move_vy = val;
-            data->state.move_ema_vy = (int16_t)((val + data->state.move_ema_vy) >> 1);
+            data->state.move_ema_vy = inertia_half(val + data->state.move_ema_vy);
         }
 
         // Manual movement is NOT marked as is_inertial yet.
@@ -355,11 +373,11 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
 
         if (event->code == INPUT_REL_HWHEEL) {
             data->state.scroll_vx = val;
-            data->state.scroll_ema_vx = (int16_t)((val + data->state.scroll_ema_vx) >> 1);
+            data->state.scroll_ema_vx = inertia_half(val + data->state.scroll_ema_vx);
         }
         if (event->code == INPUT_REL_WHEEL) {
             data->state.scroll_vy = val;
-            data->state.scroll_ema_vy = (int16_t)((val + data->state.scroll_ema_vy) >> 1);
+            data->state.scroll_ema_vy = inertia_half(val + data->state.scroll_ema_vy);
         }
 
         // Same logic: slow stops will bypass rescheduling, safely canceling inertia on timer expiry.
