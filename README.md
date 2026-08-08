@@ -126,18 +126,18 @@ This module performs all calculations using only **integer addition, multiplicat
 
 ## Configuration Reference
 
-| Property | Type | Required | Description |
+| Property | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `trigger-ms` | int | yes | Delay after manual input stops before inertia starts. Set to at least twice the sensor's polling interval. |
-| `move-decay-factor-int` | int | yes | Velocity retained per report interval, as a percentage. Higher is slipperier. |
-| `move-report-interval-ms` | int | yes | Interval between inertia movement reports. Matching the sensor's polling rate gives the smoothest transition. |
-| `move-threshold-start` | int | yes | Minimum velocity from the last manual input needed to start inertia. |
-| `move-threshold-stop` | int | yes | Velocity below which inertia stops. |
-| `scroll-decay-factor-int` | int | yes | Velocity retained per report interval while scrolling. |
-| `scroll-report-interval-ms` | int | yes | Interval between scroll inertia updates. |
-| `scroll-threshold-start` | int | yes | Minimum scroll velocity needed to start inertia. |
-| `scroll-threshold-stop` | int | yes | Scroll velocity below which inertia stops. |
-| `cancel-scroll-inertia-on-ctrl` | bool | no | Stop active scroll inertia and suppress new scroll inertia while Ctrl is held, so Ctrl+wheel does not zoom the host by accident. |
+| `trigger-ms` | int | 35 | Delay after manual input stops before inertia starts. Set to at least twice the sensor's polling interval. |
+| `move-decay-factor-int` | int | 90 | Velocity retained per report interval, as a percentage. Higher is slipperier. |
+| `move-report-interval-ms` | int | 35 | Interval between inertia movement reports. Matching the sensor's polling rate gives the smoothest transition. |
+| `move-threshold-start` | int | 15 | Minimum velocity from the last manual input needed to start inertia. |
+| `move-threshold-stop` | int | 1 | Velocity below which inertia stops. |
+| `scroll-decay-factor-int` | int | 85 | Velocity retained per report interval while scrolling. |
+| `scroll-report-interval-ms` | int | 65 | Interval between scroll inertia updates. |
+| `scroll-threshold-start` | int | 2 | Minimum scroll velocity needed to start inertia. |
+| `scroll-threshold-stop` | int | 0 | Scroll velocity below which inertia stops. |
+| `cancel-scroll-inertia-on-ctrl` | bool | false | Stop active scroll inertia and suppress new scroll inertia while Ctrl is held, so Ctrl+wheel does not zoom the host by accident. |
 
 ### Decay factor range
 

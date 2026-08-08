@@ -127,18 +127,18 @@ ZMKが動作する多くの組み込みMCUは、浮動小数点演算（float/do
 
 ## Configuration Reference
 
-| プロパティ | 型 | 必須 | 説明 |
+| プロパティ | 型 | 既定値 | 説明 |
 | :--- | :--- | :--- | :--- |
-| `trigger-ms` | int | ○ | 手動入力が止まってから慣性が始まるまでの遅延。センサーのポーリング間隔の 2 倍以上にしてください。 |
-| `move-decay-factor-int` | int | ○ | レポート間隔ごとに保持する速度の割合（%）。大きいほど滑ります。 |
-| `move-report-interval-ms` | int | ○ | 慣性移動レポートの間隔。センサーのポーリングレートに合わせると最も滑らかです。 |
-| `move-threshold-start` | int | ○ | 慣性を開始するのに必要な、直前の手動入力の速度。 |
-| `move-threshold-stop` | int | ○ | これを下回ると慣性が停止する速度。 |
-| `scroll-decay-factor-int` | int | ○ | スクロール時にレポート間隔ごとに保持する速度の割合（%）。 |
-| `scroll-report-interval-ms` | int | ○ | スクロール慣性の更新間隔。 |
-| `scroll-threshold-start` | int | ○ | スクロール慣性を開始するのに必要な速度。 |
-| `scroll-threshold-stop` | int | ○ | これを下回るとスクロール慣性が停止する速度。 |
-| `cancel-scroll-inertia-on-ctrl` | bool | — | Ctrl 押下中はスクロール慣性を停止し、新たな慣性も抑止します。Ctrl+ホイールによる意図しないズームを防げます。 |
+| `trigger-ms` | int | 35 | 手動入力が止まってから慣性が始まるまでの遅延。センサーのポーリング間隔の 2 倍以上にしてください。 |
+| `move-decay-factor-int` | int | 90 | レポート間隔ごとに保持する速度の割合（%）。大きいほど滑ります。 |
+| `move-report-interval-ms` | int | 35 | 慣性移動レポートの間隔。センサーのポーリングレートに合わせると最も滑らかです。 |
+| `move-threshold-start` | int | 15 | 慣性を開始するのに必要な、直前の手動入力の速度。 |
+| `move-threshold-stop` | int | 1 | これを下回ると慣性が停止する速度。 |
+| `scroll-decay-factor-int` | int | 85 | スクロール時にレポート間隔ごとに保持する速度の割合（%）。 |
+| `scroll-report-interval-ms` | int | 65 | スクロール慣性の更新間隔。 |
+| `scroll-threshold-start` | int | 2 | スクロール慣性を開始するのに必要な速度。 |
+| `scroll-threshold-stop` | int | 0 | これを下回るとスクロール慣性が停止する速度。 |
+| `cancel-scroll-inertia-on-ctrl` | bool | false | Ctrl 押下中はスクロール慣性を停止し、新たな慣性も抑止します。Ctrl+ホイールによる意図しないズームを防げます。 |
 
 ### decay factor の範囲
 
