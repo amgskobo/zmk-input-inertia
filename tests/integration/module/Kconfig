@@ -1,0 +1,3 @@
+config ZMK_INPUT_INERTIA_TEST
+    bool "Run inertia runtime self-tests"
+    depends on ZMK_INPUT_PROCESSOR_INERTIA
