@@ -1,0 +1,31 @@
+#include <behaviors.dtsi>
+#include <dt-bindings/zmk/keys.h>
+
+/ {
+    keymap {
+        compatible = "zmk,keymap";
+
+        base {
+            bindings = <&kp A &kp B &kp C &kp D>;
+        };
+    };
+
+    inertia_test: inertia_test {
+        compatible = "zmk,input-processor-inertia";
+        #input-processor-cells = <0>;
+        trigger-ms = <35>;
+        move-decay-factor-int = <90>;
+        move-report-interval-ms = <35>;
+        move-threshold-start = <15>;
+        move-threshold-stop = <1>;
+        scroll-decay-factor-int = <85>;
+        scroll-report-interval-ms = <65>;
+        scroll-threshold-start = <2>;
+        scroll-threshold-stop = <0>;
+        cancel-scroll-inertia-on-ctrl;
+    };
+};
+
+&kscan {
+    events = <>;
+};

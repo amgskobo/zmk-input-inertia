@@ -1,0 +1,10 @@
+#define TEST_TRIGGER_MS 35
+#define TEST_MOVE_DECAY 90
+#define TEST_MOVE_INTERVAL 65536
+#define TEST_MOVE_START 15
+#define TEST_MOVE_STOP 1
+#define TEST_SCROLL_DECAY 85
+#define TEST_SCROLL_INTERVAL 65
+#define TEST_SCROLL_START 2
+#define TEST_SCROLL_STOP 0
+#include "../fixture.dtsi"

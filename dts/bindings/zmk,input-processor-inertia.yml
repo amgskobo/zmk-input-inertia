@@ -9,7 +9,7 @@ properties:
     type: int
     default: 35
     description: |
-      The delay (ms) after manual input stops before inertia starts.
+      The delay (ms) after manual input stops before inertia starts. Must be 1-65535.
       IMPORTANT: To prevent "bouncing" or accidental triggers during manual movement,
       set this to AT LEAST TWICE the sensor's polling interval (e.g., 30ms for a 15ms sensor).
 
@@ -17,7 +17,7 @@ properties:
     type: int
     default: 90
     description: |
-      Velocity retention percentage (0-100) per report interval.
+      Velocity retention percentage (0-99) per report interval.
       Higher values (e.g., 95) make the movement feel slipperier and longer-lasting.
 
   move-report-interval-ms:
@@ -25,45 +25,50 @@ properties:
     default: 35
     description: |
       The time interval (ms) for calculating and sending inertia movement reports.
+      Must be 1-65535.
       Matching this to your sensor's polling rate (e.g., 15ms) provides the smoothest transition.
 
   move-threshold-start:
     type: int
     default: 15
     description: |
-      Minimum velocity magnitude from the last manual input required to start inertia.
+      Minimum absolute delta from the last manual frame required to start inertia.
+      Must be 1-32767 and greater than move-threshold-stop.
       Prevents accidental sliding from micro-gestures.
 
   move-threshold-stop:
     type: int
     default: 1
     description: |
-      Minimum velocity magnitude required to continue inertia movement.
-      Once velocity falls below this, the inertia movement stops completely.
+      Inertia stops when both axes are at or below this value.
+      Must be non-negative and less than move-threshold-start.
 
   scroll-decay-factor-int:
     type: int
     default: 85
     description: |
-      Velocity retention percentage for scrolling. Higher values result in longer scrolls.
+      Velocity retention percentage for scrolling (0-99).
+      Higher values result in longer scrolls.
 
   scroll-report-interval-ms:
     type: int
     default: 65
     description: |
-      The time interval (ms) for scroll inertia updates.
+      The time interval (ms) for scroll inertia updates. Must be 1-65535.
 
   scroll-threshold-start:
     type: int
     default: 2
     description: |
-      Minimum scroll velocity magnitude to activate inertia.
+      Minimum absolute scroll delta needed to activate inertia.
+      Must be 1-32767 and greater than scroll-threshold-stop.
 
   scroll-threshold-stop:
     type: int
     default: 0
     description: |
-      Minimum scroll velocity to continue inertia.
+      Scroll inertia stops when both axes are at or below this value.
+      Must be non-negative and less than scroll-threshold-start.
 
   cancel-scroll-inertia-on-ctrl:
     type: boolean

@@ -1,0 +1,1 @@
+move-threshold-stop must be less than move-threshold-start

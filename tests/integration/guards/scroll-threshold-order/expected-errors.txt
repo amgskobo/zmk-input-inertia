@@ -1,0 +1,1 @@
+scroll-threshold-stop must be less than scroll-threshold-start

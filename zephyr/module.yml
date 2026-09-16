@@ -1,12 +1,6 @@
-# Delete all unused properties.
-
-# Give your module a name
 name: zmk-input-inertia
 build:
-  # Folder containing a "CMakeLists.txt" (. = root)
   cmake: .
-  # Kconfig filepath
   kconfig: Kconfig
   settings:
-    # Folder containing a "dts" folder (. = root)
     dts_root: .

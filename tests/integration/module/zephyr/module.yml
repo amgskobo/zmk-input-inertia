@@ -1,0 +1,4 @@
+name: zmk-input-inertia-test
+build:
+  cmake: .
+  kconfig: Kconfig
