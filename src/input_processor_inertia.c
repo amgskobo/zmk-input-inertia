@@ -23,6 +23,7 @@
 #include <dt-bindings/zmk/modifiers.h>
 #include <zmk/endpoints.h>
 #include <zmk/hid.h>
+#include <zmk/workqueue.h>
 
 #include <zmk-input-inertia/inertia_core.h>
 #if IS_ENABLED(CONFIG_ZMK_INPUT_INERTIA_TEST)
@@ -206,7 +207,8 @@ static void finish_motion_frame_locked(struct inertia_motion_state *motion,
         inertia_abs_i16(value[INERTIA_AXIS_Y]) >= threshold_start) {
         motion->active = true;
         motion->inertial = false;
-        (void)k_work_reschedule(work, K_MSEC(trigger_ms));
+        (void)k_work_reschedule_for_queue(zmk_workqueue_lowprio_work_q(), work,
+                                          K_MSEC(trigger_ms));
         return;
     }
 
@@ -251,7 +253,8 @@ static void move_decay_callback(struct k_work *work) {
     }
 
     generation = atomic_get(&stream->move.generation);
-    (void)k_work_reschedule(&stream->move_work, K_MSEC(config->move_interval_ms));
+    (void)k_work_reschedule_for_queue(zmk_workqueue_lowprio_work_q(), &stream->move_work,
+                                      K_MSEC(config->move_interval_ms));
     k_mutex_unlock(&data->lock);
 
 #if IS_ENABLED(CONFIG_ZMK_INPUT_INERTIA_TEST)
@@ -300,7 +303,8 @@ static void scroll_decay_callback(struct k_work *work) {
     }
 
     generation = atomic_get(&stream->scroll.generation);
-    (void)k_work_reschedule(&stream->scroll_work, K_MSEC(config->scroll_interval_ms));
+    (void)k_work_reschedule_for_queue(zmk_workqueue_lowprio_work_q(), &stream->scroll_work,
+                                      K_MSEC(config->scroll_interval_ms));
     k_mutex_unlock(&data->lock);
 
 #if IS_ENABLED(CONFIG_ZMK_INPUT_INERTIA_TEST)

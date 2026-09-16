@@ -157,6 +157,10 @@ X and Y events are accumulated until the event marked `sync` closes the input fr
 
 Manual pointer or scroll input cancels conflicting pending and active inertia across listeners. Each cancellation advances an atomic generation counter. A delayed callback compares the generation before emitting its report and discards stale output if manual input changed the state while it was running.
 
+Decay callbacks and their HID reports run on ZMK's shared low-priority work
+queue, not Zephyr's system work queue. Continuous inertia therefore cannot
+delay system work such as Bluetooth, split and watchdog housekeeping.
+
 ## Testing
 
 Run the dependency-free arithmetic and frame tests:

@@ -158,6 +158,10 @@ X/Yイベントは`sync`が付いたイベントで入力フレームが閉じ�
 
 手動のpointer／scroll入力は、listenerをまたいで競合する予約中・実行中の慣性を停止します。停止時にはatomic generation counterを更新します。遅延callbackはreport送信前にgenerationを再確認し、処理中に手動入力が状態を変更していた場合は古い出力を捨てます。
 
+減衰callbackとそこからのHID reportは、Zephyrのsystem work queueではなく、
+ZMKの共有low-priority work queueで実行します。慣性が連続している間も、Bluetooth、
+split、watchdogなどのsystem workを遅延させません。
+
 ## テスト
 
 依存のない算術・フレームテスト:
