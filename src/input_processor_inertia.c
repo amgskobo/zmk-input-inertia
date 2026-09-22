@@ -118,15 +118,22 @@ static void cancel_scroll_locked(struct inertia_stream *stream) {
     clear_motion_state(&stream->scroll);
 }
 
+/*
+ * A missing state is the single-stream call and uses stream zero. An index past
+ * the allocated streams has no stream at all: its event passes through
+ * untouched rather than landing on stream zero's motion.
+ */
 static struct inertia_stream *stream_for_event(struct inertia_data *data,
-                                               struct zmk_input_processor_state *state) {
-    size_t index = 0U;
-
-    if (state != NULL && state->input_device_index < INERTIA_STREAM_COUNT) {
-        index = state->input_device_index;
+                                               const struct zmk_input_processor_state *state) {
+    if (state == NULL) {
+        return &data->streams[0];
     }
 
-    return &data->streams[index];
+    if (state->input_device_index >= INERTIA_STREAM_COUNT) {
+        return NULL;
+    }
+
+    return &data->streams[state->input_device_index];
 }
 
 static void begin_move_frame_locked(struct inertia_data *data, struct inertia_stream *target) {
@@ -341,7 +348,7 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
     ARG_UNUSED(param1);
     ARG_UNUSED(param2);
 
-    if (!move_x && !move_y && !scroll_x && !scroll_y && !event->sync) {
+    if (stream == NULL || (!move_x && !move_y && !scroll_x && !scroll_y && !event->sync)) {
         return ZMK_INPUT_PROC_CONTINUE;
     }
 

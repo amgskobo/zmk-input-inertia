@@ -1,3 +1,6 @@
+# Copyright (c) 2025-2026 amgskobo
+# SPDX-License-Identifier: MIT
+
 name: zmk-input-inertia
 build:
   cmake: .

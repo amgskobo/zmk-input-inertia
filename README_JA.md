@@ -1,4 +1,8 @@
-# ZMK Inertia Input Processor (日本語版)
+# ZMK Inertia Input Processor
+
+[![Test](https://github.com/amgskobo/zmk-input-inertia/actions/workflows/test.yml/badge.svg)](https://github.com/amgskobo/zmk-input-inertia/actions/workflows/test.yml)
+
+[English](README.md)
 
 このモジュールは、ZMKの**入力処理パイプライン**に**マウスの慣性（Inertia）効果を追加します。トラックパッドやトラックボールなどの相対移動入力が終了した後、設定された減衰率に従って動きを継続**させ、自然な慣性スクロールやマウス移動を実現します。
 
@@ -94,13 +98,13 @@ manifest:
 
 ## 🚀 最適化ガイド
 
-### **「2倍の法則」 (trigger-ms)**
+### 「2倍の法則」 (trigger-ms)
 
 スムーズな操作感のために、`trigger-ms` の設定が非常に重要です。
 
 * **課題:** ZMKはX軸とY軸の移動を個別のイベントとして処理します。処理の揺らぎ（ジッター）により、次のパケットが数ms遅れることがあります。
 * **解決策:** `trigger-ms` をセンサーのポーリング間隔の**2倍以上**に設定してください。
-  * 例: 15msセンサー（Xiao BLEなど）の場合、**30ms** または **35ms** を推奨します。
+  * 例: 15ms周期で報告するセンサーの場合、**30ms** または **35ms** を推奨します。
 * **理由:** センサーのレポート間隔のばらつきや処理タイミングの微細なズレにより、操作継続中にも関わらず「停止」と誤判定されるのを防ぐためです。この猶予を持たせることで、操作中の意図しない慣性発動（カーソルの暴れやカクつき）を確実に回避します。
 
 ---
@@ -154,7 +158,7 @@ decay factorは百分率で、ビルド時に範囲検査されます。
 
 ## 並行処理と複数listener
 
-X/Yイベントは`sync`が付いたイベントで入力フレームが閉じるまで蓄積されます。deviceが送らなかった軸は、そのフレームでは0として扱います。ZMK input listenerごとにフレームと速度履歴を分離するため、2つのdeviceの軸が誤って混ざることはありません。
+X/Yイベントは`sync`が付いたイベントで入力フレームが閉じるまで蓄積されます。deviceが送らなかった軸は、そのフレームでは0として扱います。ZMK input listenerごとにフレームと速度履歴を分離するため、2つのdeviceの軸が誤って混ざることはありません。ビルドで定義されたlistenerの範囲外のindexを持つイベントは専用の履歴を持たず、先頭listenerの履歴に混ざらないよう、変更せずにそのまま通過させます。
 
 手動のpointer／scroll入力は、listenerをまたいで競合する予約中・実行中の慣性を停止します。停止時にはatomic generation counterを更新します。遅延callbackはreport送信前にgenerationを再確認し、処理中に手動入力が状態を変更していた場合は古い出力を捨てます。
 

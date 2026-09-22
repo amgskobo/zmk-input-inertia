@@ -75,6 +75,16 @@ static void run_tests(void *p1, void *p2, void *p3) {
     __ASSERT_NO_MSG(inertia_test_get_snapshot(inertia, 0, false, NULL) == -EINVAL);
     __ASSERT_NO_MSG(inertia_test_get_snapshot(inertia, SIZE_MAX, false, &state) == -EINVAL);
 
+    /* An index past the listeners passes through and never lands on stream zero. */
+    event = relative_event(INPUT_REL_X, 200, true);
+    process(UINT8_MAX, &event);
+    __ASSERT_NO_MSG(event.value == 200);
+    state = snapshot(false);
+    __ASSERT_NO_MSG(!state.frame_open);
+    __ASSERT_NO_MSG(!state.active);
+    __ASSERT_NO_MSG(state.velocity[INERTIA_AXIS_X] == 0);
+    __ASSERT_NO_MSG(state.generation == 0U);
+
 #if DT_NUM_INST_STATUS_OKAY(zmk_input_listener) > 1
     event = relative_event(INPUT_REL_X, 200, false);
     process(0, &event);

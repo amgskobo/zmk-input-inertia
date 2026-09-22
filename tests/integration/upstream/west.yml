@@ -1,3 +1,6 @@
+# Copyright (c) 2026 amgskobo
+# SPDX-License-Identifier: MIT
+
 manifest:
   remotes:
     - name: zmkfirmware

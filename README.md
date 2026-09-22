@@ -1,12 +1,14 @@
 # ZMK Inertia Input Processor
 
+[![Test](https://github.com/amgskobo/zmk-input-inertia/actions/workflows/test.yml/badge.svg)](https://github.com/amgskobo/zmk-input-inertia/actions/workflows/test.yml)
+
+[日本語](README_JA.md)
+
 This module adds a **mouse inertia** effect to the ZMK **input processing pipeline**. After a relative movement input (like a trackpad or trackball) stops, it continues the motion according to a configured decay factor, creating a natural inertial scroll or mouse movement.
 
 Since it operates using only relative coordinate events (`INPUT_EV_REL`), it is compatible with a wide range of standard trackpads and trackballs.
 
-[日本語版ドキュメントはこちら (README_JP.md)](./README_JP.md)
-
-### **✨ Features**
+## ✨ Features
 
 * **Inertial Movement/Scrolling:** Continues and gradually decelerates movement after an input event (mouse movement or scroll) has finished.
 * **Q8 Fixed-Point Arithmetic:** Lightweight implementation without floating-point arithmetic minimizes MCU load while achieving smooth decay.
@@ -14,9 +16,9 @@ Since it operates using only relative coordinate events (`INPUT_EV_REL`), it is 
 
 ---
 
-## **🛠️ Installation and Setup**
+## 🛠️ Installation and Setup
 
-### **1\. Integrate the Module**
+### 1. Integrate the Module
 
 Add this module to your project's `config/west.yml` file.
 
@@ -31,7 +33,7 @@ manifest:
       revision: main
 ```
 
-### **2\. DTS Include**
+### 2. DTS Include
 
 Add the following line to your keyboard's DTS file.
 
@@ -39,7 +41,7 @@ Add the following line to your keyboard's DTS file.
 #include <zmk-input-inertia/input/processor/input_inertia.dtsi>
 ```
 
-### **3\. DTS Instance Configuration**
+### 3. DTS Instance Configuration
 
 ```dts
 &zip_inertia {
@@ -64,7 +66,7 @@ Add the following line to your keyboard's DTS file.
 };
 ```
 
-### **4\. Integration into the Input Processor Pipeline**
+### 4. Integration into the Input Processor Pipeline
 
 Add `&zip_inertia` to the **end** of your `input-processors` list.
 
@@ -93,18 +95,18 @@ This inertia processor sends synthesized inertia events directly to the HID endp
 
 ## 🚀 Optimization Guide
 
-### **The "2x Rule" (trigger-ms)**
+### The "2x Rule" (trigger-ms)
 
 For a smooth operation feel, the `trigger-ms` setting is crucial.
 
 * **Problem:** ZMK processes X and Y axis movements as separate events. Due to processing jitter, the next packet may be delayed by a few milliseconds.
 * **Solution:** Set `trigger-ms` to at least **twice your sensor's polling interval**.
-  * Example: For a 15ms sensor (e.g. Xiao BLE), **30ms** or **35ms** is recommended.
+  * Example: For a sensor that reports every 15ms, **30ms** or **35ms** is recommended.
 * **Reason:** This prevents false "stop" detection due to variance in sensor report intervals or processing timing. Providing this buffer ensures that inertia is not accidentally triggered (causing cursor jumpiness) while operation is still ongoing.
 
 ---
 
-## **📖 Technical Details**
+## 📖 Technical Details
 
 If velocity information below "1" is discarded during inertia processing, movement stops abruptly and unnaturally.
 This module uses Q8 fixed-point arithmetic to preserve sub-count motion between updates:
@@ -153,7 +155,7 @@ Invalid intervals, threshold ranges, and threshold ordering are also rejected at
 
 ## Concurrency and multiple listeners
 
-X and Y events are accumulated until the event marked `sync` closes the input frame. An axis omitted by the device is treated as zero for that frame. Each ZMK input listener has independent frame and velocity history, so two devices cannot combine their axes accidentally.
+X and Y events are accumulated until the event marked `sync` closes the input frame. An axis omitted by the device is treated as zero for that frame. Each ZMK input listener has independent frame and velocity history, so two devices cannot combine their axes accidentally. An event whose listener index is outside the listeners the build defines has no history of its own: it passes through unchanged instead of joining the first listener's.
 
 Manual pointer or scroll input cancels conflicting pending and active inertia across listeners. Each cancellation advances an atomic generation counter. A delayed callback compares the generation before emitting its report and discards stale output if manual input changed the state while it was running.
 

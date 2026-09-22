@@ -1,3 +1,6 @@
+# Copyright (c) 2025-2026 amgskobo
+# SPDX-License-Identifier: MIT
+
 zephyr_include_directories(include)
 
 if(CONFIG_ZMK_INPUT_PROCESSOR_INERTIA)

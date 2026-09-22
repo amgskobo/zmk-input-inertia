@@ -1,3 +1,6 @@
+# Copyright (c) 2026 amgskobo
+# SPDX-License-Identifier: MIT
+
 config ZMK_INPUT_INERTIA_TEST
     bool "Run inertia runtime self-tests"
     depends on ZMK_INPUT_PROCESSOR_INERTIA
