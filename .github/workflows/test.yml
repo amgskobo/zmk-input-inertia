@@ -9,6 +9,9 @@ on:
       - main
   pull_request:
   workflow_dispatch:
+  schedule:
+    # Recheck moving upstream and DYA main branches even without local changes.
+    - cron: '7 2 * * 1'
 
 permissions:
   contents: read
