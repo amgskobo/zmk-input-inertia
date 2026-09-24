@@ -21,6 +21,7 @@ cc "${warnings[@]}" -fsyntax-only -I"$repo_root/include" "$build_dir/header.c"
 variants=(
     "optimised:-O2"
     "sanitized:-O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=all"
+    "coverage:-O0 --coverage"
     "32-bit:-O2 -m32"
 )
 
@@ -37,3 +38,9 @@ for variant in "${variants[@]}"; do
     printf 'inertia core (%s): ' "$label"
     "$build_dir/test-$label"
 done
+
+coverage=$(cd "$build_dir" && gcov -b -c *coverage*.gcno)
+printf '%s\n' "$coverage"
+core=$(printf '%s\n' "$coverage" | grep -F -A4 '/src/inertia_core.c')
+printf '%s\n' "$core" | grep -Fq 'Lines executed:100.00%'
+printf '%s\n' "$core" | grep -Fq 'Taken at least once:100.00%'
