@@ -180,7 +180,9 @@ upstream ZMKビルドとdevicetree guardテスト:
 bash ./tests/run-integration-docker.sh
 ```
 
-coreテストは最適化、ASan/UBSan、32-bitの3構成で実行します。統合テストは最新upstream ZMKに対してビルドし、危険なdevicetree値が想定した理由で失敗することを確認します。
+coreテストは最適化、ASan/UBSan、カバレッジ、32-bitの4構成で実行します。
+CIは `inertia_core.c` の行・分岐100%を要求します。Zephyr側driver全体の値ではありません。
+統合テストは最新upstream ZMKに対してビルドし、危険なdevicetree値が想定した理由で失敗することを確認します。
 
 ## ライセンス
 
