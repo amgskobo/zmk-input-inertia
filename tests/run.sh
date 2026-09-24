@@ -44,3 +44,5 @@ printf '%s\n' "$coverage"
 core=$(printf '%s\n' "$coverage" | grep -F -A4 '/src/inertia_core.c')
 printf '%s\n' "$core" | grep -Fq 'Lines executed:100.00%'
 printf '%s\n' "$core" | grep -Fq 'Taken at least once:100.00%'
+
+python3 "$repo_root/tests/runtime/run.py"

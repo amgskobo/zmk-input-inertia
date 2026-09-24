@@ -177,9 +177,11 @@ Run the upstream ZMK build and devicetree guard suite:
 bash ./tests/run-integration-docker.sh
 ```
 
-The core suite runs optimized, ASan/UBSan, coverage, and 32-bit variants. CI
-requires 100% line and branch coverage of `inertia_core.c`; this is not a
-claim about the Zephyr driver as a whole. The integration suite builds against
+The core suite runs optimized, ASan/UBSan, coverage, and 32-bit variants. It
+also exercises nine extracted production stream/frame helpers in optimized,
+ASan/UBSan, and coverage variants. CI requires 100% line and branch coverage
+of `inertia_core.c` and those helpers separately; this is not a claim about
+the Zephyr driver as a whole. The integration suite builds against
 current upstream ZMK and verifies that unsafe devicetree values fail for the
 expected reason.
 

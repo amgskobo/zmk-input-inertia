@@ -181,7 +181,9 @@ bash ./tests/run-integration-docker.sh
 ```
 
 coreテストは最適化、ASan/UBSan、カバレッジ、32-bitの4構成で実行します。
-CIは `inertia_core.c` の行・分岐100%を要求します。Zephyr側driver全体の値ではありません。
+製品driverから抽出したstream/frame処理の9関数も、最適化、ASan/UBSan、カバレッジの3構成で実行します。
+CIは `inertia_core.c` と抽出した関数のそれぞれに行・分岐100%を要求します。
+Zephyr側driver全体の値ではありません。
 統合テストは最新upstream ZMKに対してビルドし、危険なdevicetree値が想定した理由で失敗することを確認します。
 
 ## ライセンス
