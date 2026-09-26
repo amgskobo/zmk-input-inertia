@@ -43,6 +43,11 @@ static void test_half(void) {
     assert(inertia_half(3) == 2);
     assert(inertia_half(-3) == -2);
     assert(inertia_half(65534) == INT16_MAX);
+    /* Well inside the range, but past half of it: halved, not clamped. */
+    assert(inertia_half(40000) == 20000);
+    assert(inertia_half(-40000) == -20000);
+    assert(inertia_half(65533) == 32767);
+    assert(inertia_half(-65535) == -32768);
     assert(inertia_half(-65536) == INT16_MIN);
     assert(inertia_half(INT32_MAX) == INT16_MAX);
     assert(inertia_half(INT32_MIN) == INT16_MIN);
@@ -163,6 +168,17 @@ static void test_frames(void) {
     assert(inertia_frame_finish(&frame, output));
     assert(output[INERTIA_AXIS_X] == INT16_MAX);
     assert(output[INERTIA_AXIS_Y] == INT16_MIN);
+
+    /* A finished frame is closed until something is added again. */
+    assert(!inertia_frame_finish(&frame, output));
+
+    /* Opening a frame clears it, whatever it held before it was ever set up. */
+    frame.delta[INERTIA_AXIS_X] = 77;
+    frame.delta[INERTIA_AXIS_Y] = 88;
+    frame.open = false;
+    inertia_frame_add(&frame, INERTIA_AXIS_X, 5);
+    assert(inertia_frame_finish(&frame, output));
+    assert(output[INERTIA_AXIS_X] == 5 && output[INERTIA_AXIS_Y] == 0);
 }
 
 int main(void) {

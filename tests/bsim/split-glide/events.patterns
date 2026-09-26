@@ -1,0 +1,2 @@
+/Mouse (movement|scroll) set to 0\/0$/d
+s/^d_00: @[0-9:.]{15}  \[([0-9:.,]+)\] <[a-z]+> zmk: zmk_hid_mouse_(movement|scroll)_set: (.*)/[\1] \3/p

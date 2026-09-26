@@ -1,0 +1,19 @@
+# Copyright (c) 2026 amgskobo
+# SPDX-License-Identifier: MIT
+
+description: |
+  Test-only input device that replays a script of events. Each entry waits its
+  delay after the entry before it (the first, after boot), then reports its
+  event; entries with a delay of 0 go out together with the one before.
+
+  An entry of type 254 is a glide, (period 254 steps x y): steps frames, one
+  every period ms, moving an ABS_X/ABS_Y contact in a straight line from the
+  last reported position to (x, y).
+
+compatible: "zmk,test-input-script"
+
+properties:
+  events:
+    type: array
+    required: true
+    description: (delay-ms type code value sync) tuples, or (period 254 steps x y) glides

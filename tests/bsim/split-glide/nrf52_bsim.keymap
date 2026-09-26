@@ -1,0 +1,37 @@
+/*
+ * Copyright (c) 2026 amgskobo
+ * SPDX-License-Identifier: MIT
+ *
+ * Strokes from a pointing device on the peripheral cross the split link and
+ * reach inertia on the central. A fast stroke glides after it stops, one
+ * decayed report per interval until it dies out; a new stroke cuts a glide
+ * short; a slow one does not glide; a scroll glides at its own interval; and
+ * a pointer frame stops a scroll glide. Timestamps are kept: the gaps are
+ * what inertia is about, and a simulation repeats them exactly.
+ */
+
+#include <behaviors.dtsi>
+#include <dt-bindings/zmk/keys.h>
+
+#include "shared.dtsi"
+
+&kscan {
+    /delete-property/ exit-after;
+    events = <>;
+};
+
+&split_listener {
+    status = "okay";
+};
+
+/ {
+    keymap {
+        compatible = "zmk,keymap";
+
+        default_layer {
+            bindings = <
+            &kp A &kp B
+            &kp C &kp D>;
+        };
+    };
+};

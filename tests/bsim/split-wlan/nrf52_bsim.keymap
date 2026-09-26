@@ -1,0 +1,36 @@
+/*
+ * Copyright (c) 2026 amgskobo
+ * SPDX-License-Identifier: MIT
+ *
+ * One steady stroke from a pointing device on the peripheral, across a split
+ * link that shares the air with a busy WLAN (channel 6, half its capacity).
+ * Lost packets are retried at later connection events, so frames reach the
+ * central late and in bursts. The stroke never stops, so inertia must never
+ * glide before its end: every report up to 7.0 s is the stroke's own.
+ */
+
+#include <behaviors.dtsi>
+#include <dt-bindings/zmk/keys.h>
+
+#include "shared.dtsi"
+
+&kscan {
+    /delete-property/ exit-after;
+    events = <>;
+};
+
+&split_listener {
+    status = "okay";
+};
+
+/ {
+    keymap {
+        compatible = "zmk,keymap";
+
+        default_layer {
+            bindings = <
+            &kp A &kp B
+            &kp C &kp D>;
+        };
+    };
+};

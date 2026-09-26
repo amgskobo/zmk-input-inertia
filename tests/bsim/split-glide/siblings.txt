@@ -1,0 +1,2 @@
+./ble_test_central.exe -d=2 -subscribe_to_pointer_report
+./@TEST@_peripheral.exe -d=3
