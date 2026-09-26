@@ -119,6 +119,18 @@ for test in "${tests[@]}"; do
         continue
     fi
 
+    # A case may bring a host of its own, a Zephyr application in host/, in
+    # place of ZMK's test central: siblings.txt runs it as @TEST@_host.exe.
+    if [ -d "$case_dir/host" ]; then
+        if ! west build -p -d "$out/host" -b nrf52_bsim "$case_dir/host" >"$out/host.log" 2>&1; then
+            echo "FAILED: $test: the host did not build"
+            grep -E "error|warning: " "$out/host.log" | head -20
+            status=1
+            continue
+        fi
+        cp "$out/host/zephyr/zephyr.exe" "$BSIM_OUT_PATH/bin/${exe}_host.exe"
+    fi
+
     cp "$out/central/zephyr/zmk.exe" "$BSIM_OUT_PATH/bin/$exe"
     cp "$out/peripheral/zephyr/zmk.exe" "$BSIM_OUT_PATH/bin/${exe}_peripheral.exe"
     (
