@@ -178,10 +178,14 @@ bash ./tests/run-integration-docker.sh
 ```
 
 The core suite runs optimized, ASan/UBSan, coverage, and 32-bit variants. It
-also exercises nine extracted production stream/frame helpers in optimized,
-ASan/UBSan, and coverage variants. CI requires 100% line and branch coverage
-of `inertia_core.c` and those helpers separately; this is not a claim about
-the Zephyr driver as a whole. The integration suite builds against
+then lifts every function of the driver into the stubbed harnesses in
+`tests/runtime/` and runs them optimized, under ASan/UBSan, and with coverage:
+nine stream and frame helpers, and the seven that finish frames, decay and
+emit a glide, cancel scrolling on Ctrl, and handle events. The emit path is
+tested with a settings or input change landing between the decision and the
+report. CI requires 100% line and branch coverage of `inertia_core.c` and of
+each lifted function; devicetree instantiation is left to the integration
+suite. The integration suite builds against
 current upstream ZMK and verifies that unsafe devicetree values fail for the
 expected reason.
 

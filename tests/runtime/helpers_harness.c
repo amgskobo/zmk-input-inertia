@@ -39,10 +39,29 @@ static struct keyboard_report report;
 #define MOD_RCTL 2u
 static struct keyboard_report *zmk_hid_get_keyboard_report(void) { return &report; }
 static int cancellations;
+static struct k_work_delayable *cancelled[8];
 static bool k_work_cancel_delayable(struct k_work_delayable *work) {
-    (void)work;
-    ++cancellations;
+    cancelled[cancellations++ % 8] = work;
     return true;
+}
+static bool was_cancelled(int since, const struct k_work_delayable *work) {
+    for (int i = since; i < cancellations; i++) {
+        if (cancelled[i % 8] == work) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Every field a motion can hold, set. */
+static void fill(struct inertia_motion_state *motion) {
+    for (int axis = 0; axis < INERTIA_AXIS_COUNT; ++axis) {
+        motion->velocity[axis] = 3;
+        motion->ema[axis] = 4;
+        motion->remainder_q8[axis] = 5;
+    }
+    motion->active = motion->inertial = true;
+    motion->frame.open = true;
 }
 static void atomic_inc(atomic_t *value) { ++*value; }
 
@@ -96,17 +115,16 @@ int main(void) {
     state.input_device_index = 2;
     assert(stream_for_event(&data, &state) == NULL);
 
-    first->move.velocity[0] = 4;
-    first->move.ema[1] = 5;
-    first->move.remainder_q8[0] = 6;
-    first->move.active = first->move.inertial = true;
-    first->move.frame.open = true;
+    fill(&first->move);
+    int since = cancellations;
     cancel_move_locked(first);
     assert(first->move.generation == 1 && !motion_has_state(&first->move));
-    first->scroll.velocity[0] = 7;
-    first->scroll.frame.open = true;
+    assert(!first->move.inertial && was_cancelled(since, &first->move_work));
+    fill(&first->scroll);
+    since = cancellations;
     cancel_scroll_locked(first);
     assert(first->scroll.generation == 1 && !motion_has_state(&first->scroll));
+    assert(!first->scroll.inertial && was_cancelled(since, &first->scroll_work));
 
     first->move.frame.open = true;
     int before = cancellations;
@@ -118,10 +136,20 @@ int main(void) {
     first->move.inertial = true;
     begin_move_frame_locked(&data, first);
     assert(!first->scroll.active && !second->move.active && !first->move.inertial);
+    /* The target's own running average survives a new frame. */
+    fill(&second->move);
+    second->move.frame.open = false;
     second->move.inertial = false;
-    second->move.active = true;
+    second->move.ema[0] = 9;
+    const int move_generation = second->move.generation;
+    since = cancellations;
     begin_move_frame_locked(&data, second);
     assert(!second->move.active && !second->move.inertial);
+    assert(was_cancelled(since, &second->move_work));
+    for (int axis = 0; axis < INERTIA_AXIS_COUNT; ++axis) {
+        assert(second->move.velocity[axis] == 0 && second->move.remainder_q8[axis] == 0);
+    }
+    assert(second->move.ema[0] == 9 && second->move.generation == move_generation + 1);
 
     first->scroll.frame.open = true;
     before = cancellations;
@@ -133,10 +161,20 @@ int main(void) {
     first->scroll.inertial = true;
     begin_scroll_frame_locked(&data, first);
     assert(!first->move.active && !second->scroll.active && !first->scroll.inertial);
+    /* The target's own running average survives a new frame. */
+    fill(&second->scroll);
+    second->scroll.frame.open = false;
     second->scroll.inertial = false;
-    second->scroll.active = true;
+    second->scroll.ema[0] = 9;
+    const int scroll_generation = second->scroll.generation;
+    since = cancellations;
     begin_scroll_frame_locked(&data, second);
     assert(!second->scroll.active && !second->scroll.inertial);
+    assert(was_cancelled(since, &second->scroll_work));
+    for (int axis = 0; axis < INERTIA_AXIS_COUNT; ++axis) {
+        assert(second->scroll.velocity[axis] == 0 && second->scroll.remainder_q8[axis] == 0);
+    }
+    assert(second->scroll.ema[0] == 9 && second->scroll.generation == scroll_generation + 1);
     puts("inertia stream/frame helpers: PASS");
     return 0;
 }
