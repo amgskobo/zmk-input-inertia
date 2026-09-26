@@ -1,0 +1,43 @@
+/*
+ * Copyright (c) 2026 amgskobo
+ * SPDX-License-Identifier: MIT
+ *
+ * A pointing device on the peripheral, scripted: strokes of one frame every
+ * 10 ms, as (delay-ms type code value sync).
+ */
+
+#include <zephyr/dt-bindings/input/input-event-codes.h>
+
+#include "shared.dtsi"
+
+#define MOVE(delay, x, y) delay INPUT_EV_REL INPUT_REL_X (x) 0 0 INPUT_EV_REL INPUT_REL_Y (y) 1
+#define WHEEL(delay, v) delay INPUT_EV_REL INPUT_REL_WHEEL (v) 1
+
+&kscan {
+    /delete-property/ exit-after;
+    events = <>;
+};
+
+/ {
+    pointer: pointer {
+        compatible = "zmk,test-input-script";
+        events = <
+            /* 4.00 s: a fast stroke, then a glide. */
+            MOVE(4000, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            /* 4.40 s: a stroke back cuts the glide short and glides itself. */
+            MOVE(330, -20, -10) MOVE(10, -20, -10) MOVE(10, -20, -10) MOVE(10, -20, -10)
+            MOVE(10, -20, -10)
+            /* 6.00 s: a slow stroke, under move-threshold-start: no glide. */
+            MOVE(1560, 5, 3) MOVE(10, 5, 3) MOVE(10, 5, 3) MOVE(10, 5, 3)
+            /* 7.00 s: a scroll, then its glide. */
+            WHEEL(970, 3) WHEEL(10, 3) WHEEL(10, 3) WHEEL(10, 3)
+            /* 8.00 s: a scroll whose glide a pointer frame stops. */
+            WHEEL(970, 3) WHEEL(10, 3) WHEEL(10, 3) WHEEL(10, 3) MOVE(200, 1, 0)
+        >;
+    };
+};
+
+&split_input {
+    device = <&pointer>;
+};

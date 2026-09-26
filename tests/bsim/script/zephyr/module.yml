@@ -1,0 +1,10 @@
+# Copyright (c) 2026 amgskobo
+# SPDX-License-Identifier: MIT
+
+# Named, so it cannot collide with another module directory of the same name.
+name: zmk-test-input-script
+build:
+  cmake: .
+  kconfig: Kconfig
+  settings:
+    dts_root: .

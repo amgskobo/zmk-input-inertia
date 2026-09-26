@@ -1,0 +1,3 @@
+./ble_test_central.exe -d=2 -subscribe_to_pointer_report
+./@TEST@_peripheral.exe -d=3
+./bs_device_2G4_WLAN_actmod -d=4 -channel=6 -ConfigSet=50 -rs=7 -timestart 3900000 -timeend 7100000 -power=20

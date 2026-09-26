@@ -1,0 +1,28 @@
+/*
+ * Copyright (c) 2026 amgskobo
+ * SPDX-License-Identifier: MIT
+ *
+ * What both halves share: the peripheral's input device reaches the central
+ * through a ZMK input split, whose central side the listener reads.
+ */
+
+#include <zmk-input-inertia/input/processor/input_inertia.dtsi>
+
+/ {
+    splits {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        split_input: split_input@0 {
+            compatible = "zmk,input-split";
+            reg = <0>;
+        };
+    };
+
+    split_listener: split_listener {
+        compatible = "zmk,input-listener";
+        status = "disabled";
+        device = <&split_input>;
+        input-processors = <&zip_inertia>;
+    };
+};

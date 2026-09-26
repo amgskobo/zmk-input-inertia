@@ -1,0 +1,90 @@
+/*
+ * Copyright (c) 2026 amgskobo
+ * SPDX-License-Identifier: MIT
+ *
+ * A pointing device on the peripheral, scripted: one stroke of (20, 10) every
+ * 10 ms from 4.0 s to 7.0 s, while a busy WLAN shares the air.
+ */
+
+#include <zephyr/dt-bindings/input/input-event-codes.h>
+
+#include "shared.dtsi"
+
+#define MOVE(delay, x, y) delay INPUT_EV_REL INPUT_REL_X (x) 0 0 INPUT_EV_REL INPUT_REL_Y (y) 1
+
+&kscan {
+    /delete-property/ exit-after;
+    events = <>;
+};
+
+/ {
+    pointer: pointer {
+        compatible = "zmk,test-input-script";
+        events = <
+            MOVE(4000, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+            MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10) MOVE(10, 20, 10)
+        >;
+    };
+};
+
+&split_input {
+    device = <&pointer>;
+};
