@@ -88,17 +88,28 @@ for test in "${tests[@]}"; do
         modules="$modules;$case_dir/module"
     fi
     modules="${modules#;}"
-    central_conf=()
+    # Each side's Kconfig: the files the caller gives for every case in
+    # CENTRAL_CONFS and PERIPHERAL_CONFS (';' lists, a keyboard's own .conf
+    # files, say), then the case's own, which wins.
+    central_confs="${CENTRAL_CONFS:-}"
     if [ -f "$case_dir/central.conf" ]; then
-        central_conf=("-DEXTRA_CONF_FILE=$case_dir/central.conf")
+        central_confs="${central_confs:+$central_confs;}$case_dir/central.conf"
+    fi
+    central_conf=()
+    if [ -n "$central_confs" ]; then
+        central_conf=("-DEXTRA_CONF_FILE=$central_confs")
     fi
     central_overlay=()
     if [ -f "$case_dir/central.overlay" ]; then
         central_overlay=("-DEXTRA_DTC_OVERLAY_FILE=$case_dir/central.overlay")
     fi
-    peripheral_conf=()
+    peripheral_confs="${PERIPHERAL_CONFS:-}"
     if [ -f "$case_dir/peripheral.conf" ]; then
-        peripheral_conf=("-DEXTRA_CONF_FILE=$case_dir/peripheral.conf")
+        peripheral_confs="${peripheral_confs:+$peripheral_confs;}$case_dir/peripheral.conf"
+    fi
+    peripheral_conf=()
+    if [ -n "$peripheral_confs" ]; then
+        peripheral_conf=("-DEXTRA_CONF_FILE=$peripheral_confs")
     fi
 
     if ! west build -p -d "$out/peripheral" -b nrf52_bsim//zmk_test_mock -- \
