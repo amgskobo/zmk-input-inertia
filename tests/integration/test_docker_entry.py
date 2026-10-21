@@ -93,6 +93,27 @@ class DockerHandoff(unittest.TestCase):
         result = self.run_entry('dya', DOCKER_EXIT='37')
         self.assertEqual(result.returncode, 37, result.stderr)
 
+    def test_online_manifest_freezes_only_projects_selected_by_update(self):
+        west = Path(self.env['PATH'].split(os.pathsep)[0]) / 'west'
+        west.write_text(
+            '#!/usr/bin/env python3\n'
+            'import json, os, pathlib, sys\n'
+            'args = sys.argv[1:]\n'
+            'with pathlib.Path(os.environ["WEST_CALLS"]).open("a") as log:\n'
+            '    log.write(json.dumps(args) + "\\n")\n'
+            'if args and args[0] == "manifest":\n'
+            '    sys.exit(86 if args == ["manifest", "--freeze", "--active-only"] else 87)\n'
+        )
+        for variant in ('upstream', 'dya'):
+            with self.subTest(variant=variant):
+                output = self.base / ('active-manifest-' + variant)
+                result = self.run_entry(variant, 'tests/integration/run.sh',
+                                        ZMK_TEST_OUTPUT=str(output))
+                self.assertEqual(result.returncode, 86, result.stdout + result.stderr)
+                calls = [json.loads(line) for line in self.west_calls.read_text().splitlines()]
+                self.assertIn(['update', '--narrow', '--fetch-opt=--depth=1'], calls)
+                self.assertEqual(calls[-1], ['manifest', '--freeze', '--active-only'])
+
 
 if __name__ == '__main__':
     unittest.main()

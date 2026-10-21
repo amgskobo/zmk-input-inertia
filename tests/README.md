@@ -45,7 +45,10 @@ ZMK_TEST_OUTPUT=/absolute/fresh-dya bash tests/run-integration-docker.sh dya
 
 The default variant is `upstream`. Each online run creates a new west workspace
 from the selected owner manifest, resolves stock `main` or DYA `main+dya`, and
-records its frozen manifest. These online branches move; they are not the fixed
+records a frozen manifest of all active projects selected by `west update`.
+Inactive uncloned groups are not required solely for that record; the Docker
+handoff regression exercises both online variants through manifest generation.
+These online branches move; they are not the fixed
 offline pins below. CI runs both variants, uses a digest-pinned build image,
 and retains logs, identities, config, DTS and native binaries even after failure.
 Push/PR uses quick host checks; scheduled/manual runs use full host checks.

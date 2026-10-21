@@ -45,7 +45,9 @@ if [ -n "${ZMK_TEST_OFFLINE_WORKSPACE:-}" ]; then
     # requiring unrelated projects merely to record the manifest.
     west manifest --resolve >"$work_dir/resolved-manifest.yml"
 else
-    west manifest --freeze >"$work_dir/resolved-manifest.yml"
+    # west update skips disabled groups (including unused BabbleSim projects).
+    # Freeze every selected project without requiring inactive uncloned ones.
+    west manifest --freeze --active-only >"$work_dir/resolved-manifest.yml"
 fi
 export ZEPHYR_BASE="$workspace/zephyr"
 # Resolve against the selected manifest, including offline dependency symlinks.
