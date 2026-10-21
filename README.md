@@ -157,37 +157,48 @@ Invalid intervals, threshold ranges, and threshold ordering are also rejected at
 
 X and Y events are accumulated until the event marked `sync` closes the input frame. An axis omitted by the device is treated as zero for that frame. Each ZMK input listener has independent frame and velocity history, so two devices cannot combine their axes accidentally. An event whose listener index is outside the listeners the build defines has no history of its own: it passes through unchanged instead of joining the first listener's.
 
-Manual pointer or scroll input cancels conflicting pending and active inertia across listeners. Each cancellation advances an atomic generation counter. A delayed callback compares the generation before emitting its report and discards stale output if manual input changed the state while it was running.
+Manual pointer or scroll input cancels conflicting inertia across listeners
+of the same Inertia node on the first relative event, before frame sync. The
+manual event is passed through unchanged. Separate Inertia nodes remain
+independent, for example a pointer hand and a scrolling hand.
 
-Decay callbacks and their HID reports run on ZMK's shared low-priority work
-queue, not Zephyr's system work queue. Continuous inertia therefore cannot
-delay system work such as Bluetooth, split and watchdog housekeeping.
+Decay calculations run on ZMK's low-priority work queue. Each stream has at
+most one pending complete movement frame and one pending complete scroll
+frame. A single nonblocking input-queue token carries the frame identity; X/Y
+cannot be partially admitted. The node's private input callback checks the
+cancellation generation immediately before accepting output. Stale queued
+frames are discarded. A late consumer does not accumulate catch-up frames;
+when the input queue is full, that interval is dropped and later decay can
+retry. No additional input processor or keymap listener is required.
+
+HID set/send/clear runs on the same input thread as ordinary ZMK pointing
+listeners, so those transactions cannot overwrite one another. The input-state
+mutex is released before the endpoint call: a concurrent cancellation does not
+wait for transport while holding that state boundary. A report already handed
+to the endpoint cannot be retracted. This does not bound the existing ZMK input
+queue or USB/BLE transport latency, and cannot serialize unrelated code that
+writes HID outside the normal input path.
+
+`CONFIG_INPUT_MODE_THREAD` is required (the Zephyr default). Synchronous input
+mode is rejected at build time because it would run HID writes concurrently.
 
 ## Testing
 
-Run the dependency-free arithmetic and frame tests:
-
 ```sh
-bash ./tests/run-docker.sh
+bash tests/run-docker.sh
+ZMK_TEST_MODE=full bash tests/run-docker.sh
+bash tests/run-integration-docker.sh upstream
+bash tests/run-integration-docker.sh dya
 ```
 
-Run the upstream ZMK build and devicetree guard suite:
-
-```sh
-bash ./tests/run-integration-docker.sh
-```
-
-The core suite runs optimized, ASan/UBSan, coverage, and 32-bit variants. It
-then lifts every function of the driver into the stubbed harnesses in
-`tests/runtime/` and runs them optimized, under ASan/UBSan, and with coverage:
-nine stream and frame helpers, and the seven that finish frames, decay and
-emit a glide, cancel scrolling on Ctrl, and handle events. The emit path is
-tested with a settings or input change landing between the decision and the
-report. CI requires 100% line and branch coverage of `inertia_core.c` and of
-each lifted function; devicetree instantiation is left to the integration
-suite. The integration suite builds against
-current upstream ZMK and verifies that unsafe devicetree values fail for the
-expected reason.
+Quick runs every host behavior under ASan/UBSan and the infrastructure unit
+tests. Full adds the retained optimization, coverage and ABI variants, requiring
+100% line/branch coverage of the core and lifted driver functions. Integration
+uses both unchanged supported cores, real threaded input/kernel boundaries and
+invalid-configuration guards. Online manifests follow their selected branches;
+the explicit offline path checks exact pins. CI retains both variants' failure
+evidence. See [the module-owned test guide](tests/README.md) for fresh outputs,
+focused commands, negative controls and physical acceptance gaps.
 
 ## License
 

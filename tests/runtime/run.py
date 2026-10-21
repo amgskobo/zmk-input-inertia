@@ -1,7 +1,10 @@
 # Copyright (c) 2026 amgskobo
 # SPDX-License-Identifier: MIT
 
-"""Exercise production driver code with host stubs and require full coverage of it.
+"""Exercise all production-driver scenarios in quick or full host mode.
+
+Quick runs every fixture under ASan/UBSan. Full additionally executes the
+optimized and measured coverage variants and retains the coverage gate below.
 
 Each fixture names a source file, the functions whose lines and branches it
 gates, and any further functions it only needs in order to compile. They are
@@ -20,6 +23,15 @@ import pathlib
 import re
 import subprocess
 import tempfile
+
+import os
+
+mode = os.environ.get("ZMK_TEST_MODE", "quick")
+if mode not in ("quick", "full"):
+    raise SystemExit("ZMK_TEST_MODE must be quick or full")
+variants = (('optimized', ['-O2']), ('sanitized', ['-O1', '-g', '-fno-omit-frame-pointer', '-fsanitize=address,undefined', '-fno-sanitize-recover=all']), ('coverage', ['-O0', '--coverage']))
+if mode == "quick":
+    variants = tuple(v for v in variants if v[0] == "sanitized")
 
 root = pathlib.Path(__file__).resolve().parents[2]
 source_dir = root / "src"
@@ -43,6 +55,8 @@ fixtures = (
     ("driver", "input_processor_inertia.c", (
         "finish_motion_frame_locked",
         "decay_motion_locked",
+        "decay_work",
+        "inertia_input_callback",
         "move_decay_callback",
         "scroll_decay_callback",
         "inertia_handle_event",
@@ -113,6 +127,7 @@ def body_end(source, opening):
 def misses(gcov_text, ranges):
     """Count lines and branches inside ranges; list what never ran."""
     lines = executed = branches = taken = 0
+    observed = [0 for _range in ranges]
     missed = []
     current = None
     for row in gcov_text.splitlines():
@@ -134,10 +149,17 @@ def misses(gcov_text, ranges):
         if not inside or count == "-":
             continue
         lines += 1
+        for index, (first, last) in enumerate(ranges):
+            if first <= number <= last:
+                observed[index] += 1
         if count.startswith(("#####", "=====")):
             missed.append(f"  {number}: {text.strip()}  (never ran)")
         else:
             executed += 1
+    if not ranges or not lines:
+        raise RuntimeError("coverage report has no executable lines in gated functions")
+    if any(count == 0 for count in observed):
+        raise RuntimeError("coverage report has no executable lines for a gated function range")
     return lines, executed, branches, taken, missed
 
 
@@ -173,9 +195,10 @@ for fixture, file_name, gated, support in fixtures:
     ranges = []
     for name in (*support, *gated):
         first, last, text = definition(source, name)
-        if name in gated:
+        # Macro expansions are measured in their calling functions.
+        if name in gated and not name.startswith("#"):
             ranges.append((first, last))
-        elif not name.startswith("#"):
+        elif name not in gated and not name.startswith("#"):
             # A harness need not call every function it only compiles.
             text = "__attribute__((unused)) " + text
         functions.append(f'#line {first} "{source_path}"\n{text}')
@@ -189,12 +212,7 @@ for fixture, file_name, gated, support in fixtures:
         unit = work / "test.c"
         unit.write_text(harness.replace(marker, "\n".join(functions) +
                                         f'\n#line {resume} "{harness_path}"'), encoding="utf-8")
-        for variant, flags in (
-            ("optimized", ["-O2"]),
-            ("sanitized", ["-O1", "-g", "-fno-omit-frame-pointer",
-                           "-fsanitize=address,undefined", "-fno-sanitize-recover=all"]),
-            ("coverage", ["-O0", "--coverage"]),
-        ):
+        for variant, flags in variants:
             binary = work / variant
             subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror", *flags,
                             "-I" + str(root / "include"), "-I" + str(source_dir),
@@ -202,6 +220,9 @@ for fixture, file_name, gated, support in fixtures:
                             str(unit), *map(str, links), "-o", str(binary)],
                            check=True)
             subprocess.run([str(binary)], check=True)
+        if mode == "quick":
+            print(f"{fixture}: PASS (all scenarios, ASan/UBSan)")
+            continue
         subprocess.run(["gcov", "-b", "-c", "-o", str(work / "coverage-test.gcno"), str(unit)],
                        cwd=work, check=True, capture_output=True, text=True)
         report = (work / f"{file_name}.gcov").read_text(encoding="utf-8")

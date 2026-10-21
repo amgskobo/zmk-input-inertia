@@ -1,0 +1,13 @@
+/* SPDX-License-Identifier: MIT */
+/ {
+    manual_pointer: manual_pointer {};
+    review_manual_listener: review_manual_listener {
+        compatible = "zmk,input-listener";
+        device = <&manual_pointer>;
+        input-processors = <&inertia_runtime_test>;
+    };
+    review_pointer_listener {
+        compatible = "zmk,input-listener";
+        device = <&kscan>;
+    };
+};

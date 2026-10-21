@@ -1,0 +1,3 @@
+INPUT_THREAD_PRIORITY_OVERRIDE
+INPUT_MODE_THREAD
+error: Aborting due to Kconfig warnings

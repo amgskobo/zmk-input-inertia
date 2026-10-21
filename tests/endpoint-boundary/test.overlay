@@ -1,0 +1,18 @@
+/* SPDX-License-Identifier: MIT */
+/ {
+    pointer_listener_a { compatible = "zmk,input-listener"; device = <&kscan>; };
+    pointer_listener_b { compatible = "zmk,input-listener"; device = <&kscan>; };
+    inertia_independent: inertia_independent {
+        compatible = "zmk,input-processor-inertia";
+        #input-processor-cells = <0>;
+        trigger-ms = <20>;
+        move-decay-factor-int = <90>;
+        move-report-interval-ms = <100>;
+        move-threshold-start = <15>;
+        move-threshold-stop = <1>;
+        scroll-decay-factor-int = <85>;
+        scroll-report-interval-ms = <100>;
+        scroll-threshold-start = <2>;
+        scroll-threshold-stop = <0>;
+    };
+};

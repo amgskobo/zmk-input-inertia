@@ -4,6 +4,13 @@
 
 set -euo pipefail
 
+mode="${ZMK_TEST_MODE:-quick}"
+case "$mode" in
+    quick|full) ;;
+    *) echo "ZMK_TEST_MODE must be quick or full" >&2; exit 2 ;;
+esac
+export ZMK_TEST_MODE="$mode"
+
 repo_root="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 build_dir="$(mktemp -d "${TMPDIR:-/tmp}/zmk-input-inertia-test.XXXXXX")"
 
@@ -24,6 +31,9 @@ variants=(
     "coverage:-O0 --coverage"
     "32-bit:-O2 -m32"
 )
+if [ "$mode" = quick ]; then
+    variants=("sanitized:-O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=all")
+fi
 
 export ASAN_OPTIONS=detect_leaks=0
 export UBSAN_OPTIONS=print_stacktrace=1
@@ -39,10 +49,15 @@ for variant in "${variants[@]}"; do
     "$build_dir/test-$label"
 done
 
+if [ "$mode" = full ]; then
 coverage=$(cd "$build_dir" && gcov -b -c *coverage*.gcno)
 printf '%s\n' "$coverage"
 core=$(printf '%s\n' "$coverage" | grep -F -A4 '/src/inertia_core.c')
 printf '%s\n' "$core" | grep -Fq 'Lines executed:100.00%'
 printf '%s\n' "$core" | grep -Fq 'Taken at least once:100.00%'
 
+fi
+
 python3 "$repo_root/tests/runtime/run.py"
+python3 -m unittest discover -s "$repo_root/tests" -p 'test_runtime_coverage.py' -v
+python3 -m unittest discover -s "$repo_root/tests/integration" -p 'test_*.py' -v

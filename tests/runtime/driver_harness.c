@@ -17,7 +17,7 @@ struct k_work { void (*handler)(struct k_work *work); };
 struct k_work_delayable { struct k_work work; bool scheduled; int64_t delay_ms; };
 struct k_work_q { int unused; };
 struct device { const void *config; void *data; const char *name; };
-struct input_event { uint8_t sync; uint16_t type; uint16_t code; int32_t value; };
+struct input_event { const struct device *dev; uint8_t sync; uint16_t type; uint16_t code; int32_t value; };
 struct zmk_input_processor_state { uint8_t input_device_index; };
 struct keyboard_report { struct { uint8_t modifiers; } body; };
 struct inertia_test_snapshot {
@@ -28,12 +28,16 @@ struct inertia_test_snapshot {
     bool active;
     bool inertial;
     bool frame_open;
+    bool report_pending;
 };
 
 #define IS_ENABLED(option) option
 #define CONFIG_ZMK_INPUT_INERTIA_TEST 1
 #define ARG_UNUSED(x) ((void)(x))
+#define LOG_WRN_ONCE(...) ((void)0)
 #define CONTAINER_OF(ptr, type, field) ((type *)(void *)((char *)(ptr) - offsetof(type, field)))
+#define K_NO_WAIT ((k_timeout_t){0})
+#define INPUT_EV_MSC 0x04
 #define K_FOREVER ((k_timeout_t){-1})
 #define K_MSEC(ms) ((k_timeout_t){(ms)})
 #define INPUT_EV_KEY 0x01
@@ -69,6 +73,11 @@ struct inertia_motion_state {
     bool active;
     bool inertial;
 };
+struct inertia_pending_report {
+    uint32_t generation;
+    int16_t output[INERTIA_AXIS_COUNT];
+    bool queued;
+};
 struct inertia_data;
 struct inertia_stream {
     struct inertia_data *owner;
@@ -76,6 +85,7 @@ struct inertia_stream {
     struct inertia_motion_state scroll;
     struct k_work_delayable move_work;
     struct k_work_delayable scroll_work;
+    struct inertia_pending_report move_report, scroll_report;
     atomic_t move_emit_count;
     atomic_t scroll_emit_count;
 };
@@ -88,6 +98,9 @@ struct inertia_data {
 static struct keyboard_report keyboard;
 static struct k_work_q lowprio_queue;
 static int16_t hid_move[2], hid_scroll[2];
+static struct input_event input_events[32];
+static size_t input_count;
+static int input_result, endpoint_result;
 static int sent_reports;
 static int16_t sent_move[2], sent_scroll[2];
 /* Which glide the emit hook should be told about. */
@@ -142,11 +155,22 @@ static void zmk_hid_mouse_scroll_set(int16_t x, int16_t y) {
     hid_scroll[1] = y;
 }
 static int zmk_endpoint_send_mouse_report(void) {
+    assert(data.lock.depth == 0); /* transport never owns input state */
     sent_reports++;
     sent_move[0] = hid_move[0];
     sent_move[1] = hid_move[1];
     sent_scroll[0] = hid_scroll[0];
     sent_scroll[1] = hid_scroll[1];
+    return endpoint_result;
+}
+static int input_report(const struct device *dev, uint8_t type, uint16_t code,
+                        int32_t value, bool sync, k_timeout_t timeout) {
+    assert(data.lock.depth == 1 && dev == data.dev && type == INPUT_EV_MSC && sync);
+    assert(timeout.ms == 0);
+    if (input_result != 0) { return input_result; }
+    assert(input_count < sizeof(input_events) / sizeof(input_events[0]));
+    input_events[input_count++] = (struct input_event){.dev = dev, .type = type,
+        .code = code, .value = value, .sync = sync};
     return 0;
 }
 static void inertia_test_before_emit(const struct device *dev, size_t stream_index, bool scroll) {
@@ -184,14 +208,25 @@ static void wheel(struct zmk_input_processor_state *state, int32_t x, int32_t y)
     send_to(state, INPUT_EV_REL, INPUT_REL_WHEEL, y, true);
 }
 
+static void drain_reports(void) {
+    while (input_count != 0) {
+        struct input_event event = input_events[0];
+        for (size_t i = 1; i < input_count; i++) { input_events[i - 1] = input_events[i]; }
+        input_count--;
+        inertia_input_callback(&event, NULL);
+    }
+}
+
 static void run_move(size_t index) {
     stream(index)->move_work.scheduled = false;
     stream(index)->move_work.work.handler(&stream(index)->move_work.work);
+    drain_reports();
 }
 
 static void run_scroll(size_t index) {
     stream(index)->scroll_work.scheduled = false;
     stream(index)->scroll_work.work.handler(&stream(index)->scroll_work.work);
+    drain_reports();
 }
 
 static void bump_move_generation(struct inertia_stream *s) { atomic_inc(&s->move.generation); }
@@ -407,6 +442,64 @@ static void test_snapshot(void) {
     assert(!snapshot.active);
 }
 
+static void test_pending_reports(void) {
+    assert(inertia_init(&processor) == 0);
+    input_count = 0;
+    expect_scroll = false;
+    struct input_event bad = {.dev = &processor, .type = INPUT_EV_REL};
+    inertia_input_callback(&bad, NULL);
+    bad.type = INPUT_EV_MSC;
+    bad.code = 2U * INERTIA_STREAM_COUNT;
+    inertia_input_callback(&bad, NULL);
+    bad.code = 0;
+    inertia_input_callback(&bad, NULL); /* no pending slot */
+    int before = sent_reports;
+    move(NULL, 200, 0);
+    stream(0)->move_work.work.handler(&stream(0)->move_work.work);
+    assert(input_count == 1 && stream(0)->move_report.queued && sent_reports == before);
+    struct input_event wrong = input_events[0];
+    wrong.value++;
+    inertia_input_callback(&wrong, NULL);
+    assert(stream(0)->move_report.queued && sent_reports == before);
+    int16_t saved = stream(0)->move_report.output[0];
+    stream(0)->move_work.work.handler(&stream(0)->move_work.work);
+    assert(input_count == 1 && stream(0)->move_report.output[0] == saved);
+    move(&second, 3, -2); /* first manual frame preempts the other pointer */
+    assert(!stream(0)->move.active);
+    drain_reports();
+    assert(sent_reports == before && !stream(0)->move_report.queued);
+    input_result = -11;
+    move(NULL, 200, 0);
+    run_move(0);
+    assert(input_count == 0 && !stream(0)->move_report.queued && sent_reports == before);
+    assert(stream(0)->move_work.scheduled);
+    input_result = 0;
+    run_move(0);
+    assert(sent_reports == before + 1);
+    endpoint_result = -5;
+    move(NULL, 200, 0);
+    run_move(0);
+    assert(sent_reports == before + 2 && data.lock.depth == 0);
+    endpoint_result = 0;
+    stream(0)->move.generation = UINT32_MAX - 1U;
+    move(NULL, 200, 0);
+    run_move(0); /* negative int32 event value retains all generation bits */
+    assert(sent_reports == before + 3);
+    move(NULL, 200, 0);
+    run_move(0); /* uint32 generation wrap */
+    assert(sent_reports == before + 4);
+    expect_scroll = true;
+    config.cancel_scroll_inertia_on_ctrl = true;
+    wheel(NULL, 0, 20);
+    stream(0)->scroll_work.work.handler(&stream(0)->scroll_work.work);
+    assert(input_count == 1);
+    keyboard.body.modifiers = MOD_LCTL;
+    drain_reports();
+    assert(!stream(0)->scroll.active && sent_reports == before + 4);
+    keyboard.body.modifiers = 0;
+    assert(inertia_init(&processor) == 0);
+}
+
 int main(void) {
     config = (struct inertia_config){
         .move_decay_factor_q8 = 230, .move_interval_ms = 10, .move_threshold_start = 15,
@@ -419,6 +512,7 @@ int main(void) {
     test_scroll_decay();
     test_cross_stream();
     test_snapshot();
+    test_pending_reports();
     assert(data.lock.depth == 0);
     puts("inertia driver: PASS");
     return 0;

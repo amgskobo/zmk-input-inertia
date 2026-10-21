@@ -1,0 +1,15 @@
+# Copyright (c) 2026 amgskobo
+# SPDX-License-Identifier: MIT
+
+manifest:
+  remotes:
+    - name: cormoran
+      url-base: https://github.com/cormoran
+  projects:
+    - name: zmk
+      remote: cormoran
+      revision: main+dya
+      import: app/west.yml
+      clone-depth: 1
+  self:
+    path: config

@@ -9,3 +9,11 @@ config ZMK_INPUT_PROCESSOR_INERTIA
 	depends on ZMK_POINTING
 	depends on (!ZMK_SPLIT || ZMK_SPLIT_ROLE_CENTRAL)
 	select ZMK_LOW_PRIORITY_WORK_QUEUE
+
+config ZMK_INPUT_INERTIA_LOG_LEVEL
+    int "zmk-input-inertia log level (0 off, 1 error, 2 warning, 3 info, 4 debug)"
+    range 0 4
+    default 3
+    help
+      Logs contain operational state and numeric diagnostics, never input
+      contents, user labels, peer addresses or authentication material.
