@@ -38,7 +38,7 @@ source_dir = root / "src"
 # The pure core has its own gate in tests/run.sh; it is linked, not lifted.
 links = (source_dir / "inertia_core.c",)
 # Sources with a coverage gate of their own.
-elsewhere = ("inertia_core.c",)
+elsewhere = ("inertia_core.c", "input_processor_inertia_custom_settings.c")
 helpers = (
     "inertia_abs_i16",
     "ctrl_mod_is_active",
@@ -61,6 +61,10 @@ fixtures = (
         "scroll_decay_callback",
         "inertia_handle_event",
         "inertia_init",
+        "#define INERTIA_FACTOR_Q8",
+        "inertia_device_valid",
+        "inertia_get_params",
+        "inertia_set_params",
         "inertia_test_get_snapshot",
     ), helpers),
     # The weak default the test build's emit hook falls back to.
@@ -205,6 +209,13 @@ for fixture, file_name, gated, support in fixtures:
 
     harness_path = root / "tests/runtime" / f"{fixture}_harness.c"
     harness = harness_path.read_text(encoding="utf-8")
+    if "/* DRIVER_TYPES */" in harness:
+        types=[]
+        for name in ("inertia_config","inertia_motion_state","inertia_pending_report","inertia_stream","inertia_data"):
+            match=re.search(r"^struct "+name+r" \{.*?^\};",source,re.M|re.S)
+            if match is None: raise RuntimeError("missing production type: "+name)
+            types.append(match.group())
+        harness=harness.replace("/* DRIVER_TYPES */","struct inertia_data;\n"+"\n".join(types))
     marker = "/* DRIVER_FUNCTIONS */"
     resume = harness.count("\n", 0, harness.index(marker)) + 2
     with tempfile.TemporaryDirectory(prefix=f"{fixture}-runtime-") as folder:
@@ -233,3 +244,5 @@ for fixture, file_name, gated, support in fixtures:
         if missed:
             print("\n".join(missed))
             raise RuntimeError(f"{fixture} fell below 100% coverage")
+
+subprocess.run(["python3",str(root/"tests/runtime/settings.py")],check=True)

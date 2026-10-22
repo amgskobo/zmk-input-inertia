@@ -13,3 +13,7 @@ if(CONFIG_ZMK_INPUT_PROCESSOR_INERTIA)
     src/input_processor_inertia.c
   )
 endif()
+
+if(CONFIG_ZMK_INPUT_INERTIA_CUSTOM_SETTINGS)
+  target_sources(app PRIVATE src/input_processor_inertia_custom_settings.c)
+endif()

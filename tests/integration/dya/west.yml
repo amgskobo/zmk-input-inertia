@@ -11,5 +11,8 @@ manifest:
       revision: main+dya
       import: app/west.yml
       clone-depth: 1
+    - name: zmk-feature-custom-settings
+      remote: cormoran
+      revision: c6a7fef3a3be3d3ace5de9a4b0628c6418cd1f3f
   self:
     path: config

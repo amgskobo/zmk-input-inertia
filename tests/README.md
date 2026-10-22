@@ -30,12 +30,6 @@ coverage totals do not establish complete scheduling or transport acceptance.
 [contract.json](contract.json) and [maintenance.json](maintenance.json) map current
 commands, assertions and gaps.
 
-Both host modes and CI run the coverage-admission controls with recording
-compiler/gcov tools. Each gated real function needs executable lines; macro
-expansions remain measured in their callers. Normal full runs retain actual
-compiled line/branch measurement and all behavioral assertions. The synthetic
-controls prove gate behavior, not firmware execution.
-
 ## Both supported cores and retained CI results
 
 ```bash
@@ -77,7 +71,7 @@ INERTIA_NATIVE_ARTIFACTS=/absolute/fresh-endpoint bash /module/tests/endpoint-bo
 bash /module/tests/review-shared-hid/run.sh /resolved/workspace /absolute/fresh-hid
 ```
 
-Eight endpoint groups exercise the production driver, real kernel work/mutexes,
+Twelve endpoint groups exercise the production driver, real kernel work/mutexes,
 threaded input and actual ZMK HID storage. They cover move/scroll pre-emit
 cancellation, cancellation during blocked submission, another pointer's first
 axis before sync, an independent scroll node and full-queue recovery without a
@@ -117,7 +111,8 @@ It creates an unchanged local ZMK clone and dependency symlinks, preserves the
 original fixture manifest and records checked identities in `dependencies.json`.
 `resolved-manifest.yml` expands imports; unused uncloned projects are not required
 merely to freeze that offline record. No fetch, source repair or core changes
-occur. Neither Inertia fixture manifest enables custom settings.
+occur. The DYA fixture now selects pinned Custom Settings and enables the
+adapter; stock does not. Supply `ZMK_TEST_CUSTOM_SETTINGS_ARCHIVE` for offline DYA.
 
 Run infrastructure admission/output tests with:
 
@@ -133,8 +128,9 @@ Pin changes require explicit dependency review.
 Offline staging rejects output within source/dependency trees, parent-symlink
 aliases, overlapping project paths and west/config metadata collisions before
 creating output. External dependencies and sibling outputs remain supported.
-The parseable wrong-archive fixture fails a missing-hash-rejection assertion
-under the digest-bypass control; a tar error is not accepted as reproduction.
+DYA now owns the exact archive/digest admission path because its fixture enables
+the adapter. Identity/archive bypass controls must break their rejection tests;
+a tar parsing error is not accepted as the wrong-digest control.
 
 ## Retired simulation and physical gaps
 
@@ -146,3 +142,68 @@ radio/HID/LED/battery traces, physical timing, congestion/reconnect, power and
 retention remain gaps requiring matching production-board evidence. The
 consuming keyboard retains archive locations and the replacement map; that
 archive is not a prerequisite for current module checks.
+
+## Responsibility map
+
+No source-button policy/history or final-filter dependency exists here. Inertia
+owns movement/scroll qualification, decay, fractional remainders, scheduled
+output admission and cancellation. The source event handler preserves payload
+and sync; a sync may close a buffered motion frame. Pending report generations
+and one queued token prevent stale output or a burst after input-queue pressure.
+
+Motion state, frame-open state, active/inertial flags, the mutex, work items and
+pending generations have distinct roles. They do not duplicate final button
+pair history. Same-node streams share manual cancellation; independent nodes
+remain independent. Removing these fields would change the glide/cancellation
+contract, so no production state/API/DTS/Kconfig is removed in this audit.
+
+| Boundary | Retained fixture/assertions |
+| --- | --- |
+| Pure arithmetic/frame qualification | test_inertia_core.c links actual inertia_core.c: fixed-point, thresholds, frame/decay boundaries |
+| Stream/motion helpers | runtime/helpers_harness.c: same reset, independent state, qualification, manual cancellation and arithmetic |
+| Scheduled driver / queue admission | runtime/driver_harness.c: same ordered timing, first-axis cancellation, bounded pending frames, token generations, queue refusal/recovery, unlocked endpoint transaction |
+| Guarded probe | runtime/test_hook_harness.c: same test-hook behavior |
+| Real work/input/endpoint | endpoint-boundary: twelve groups, three same-binary runs/core when changed; controlled endpoint is not physical transport |
+| Actual other listener / shared HID | review-shared-hid: pending-report integrity, manual X before stale token/Y sync, exact first frame, final clearing; named controls retained |
+
+Scheduled inertia output uses an input-thread token callback and its own HID
+set/send/clear transaction. It can bypass the source listener's final filter.
+That filter is not a global HID interceptor or glide scheduler; cancellation
+and serialization must stay in this owner. Threaded input remains required;
+unrelated HID writers outside it are not covered.
+
+## Runtime settings checks
+
+The existing lifted fixtures now derive actual production config/state types.
+All previous assertions remain. API fixtures cover every scalar boundary and
+coupled threshold, all 100 percentage/Q8 round trips, no-op writes, rejection,
+independent nodes and queued-token invalidation. Whole-source adapter checks
+cover twenty keys across two nodes, defaults/ranges/events, read/type errors,
+rejected apply and duplicate keys, with executable coverage admission. Named
+controls detect ignored apply and key/storage overflow.
+
+Four added endpoint cases retain the original eight groups: move/scroll settings
+updates discard queued tokens, and complete while an accepted endpoint report
+is blocked. Committed reports finish intact and no later output escapes; setters
+finish within one simulated ms in these controlled cases. This is not an input
+queue or physical latency bound. Both cores run the twelve-group binary three
+times, alongside unchanged actual-listener/shared-HID and all 13 DTS/backend guards.
+DYA runtime also tests real registry rejection/apply and NVS persistence across
+three fresh first-boot/reload pairs of one binary. Actual Studio RPC/browser,
+physical flash power-loss/endurance and physical delivery remain NOT RUN.
+
+The readable `amgskobo__inertia` namespace and `move_period` / `scroll_period`
+keys are asserted literally by the whole adapter fixture. `scroll_inertia` plus
+`cancel_on_ctrl` exercises the exact 64-byte storage limit; overlong-key/storage
+controls remain. DYA native persists and reloads both renamed period keys as
+well as trigger wait and rejects lookup of the old namespace/interval keys.
+
+## Selected workspace admission
+
+The owner-local `integration/workspace-env.sh` derives `ZEPHYR_BASE`,
+`Zephyr_DIR` and a nonempty `ZEPHYR_MODULES` from the selected workspace.
+Discovery failure and empty module lists stop before compilation; ambient cache
+modules cannot supply missing dependencies. The canonical host entry runs
+`integration/test_workspace_env.py`, including failed-discovery/empty-list
+regressions and a symlinked cache with paths containing spaces. The native entry
+uses the same selection helper. This validates dependency selection, not hardware.

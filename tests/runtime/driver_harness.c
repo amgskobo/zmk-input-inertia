@@ -7,6 +7,8 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
+#include <zmk-input-inertia/runtime.h>
 #include <zmk-input-inertia/inertia_core.h>
 
 typedef long atomic_t;
@@ -16,7 +18,9 @@ struct k_mutex { int depth; };
 struct k_work { void (*handler)(struct k_work *work); };
 struct k_work_delayable { struct k_work work; bool scheduled; int64_t delay_ms; };
 struct k_work_q { int unused; };
-struct device { const void *config; void *data; const char *name; };
+struct device { const void *config; void *data; const char *name; const void *api; };
+static const int inertia_driver_api;
+static bool device_is_ready(const struct device *d) { return d->data != NULL; }
 struct input_event { const struct device *dev; uint8_t sync; uint16_t type; uint16_t code; int32_t value; };
 struct zmk_input_processor_state { uint8_t input_device_index; };
 struct keyboard_report { struct { uint8_t modifiers; } body; };
@@ -52,48 +56,7 @@ struct inertia_test_snapshot {
 #define MOD_RCTL 0x10
 #define INERTIA_STREAM_COUNT 2
 
-struct inertia_config {
-    uint16_t move_decay_factor_q8;
-    uint16_t move_interval_ms;
-    uint16_t move_threshold_start;
-    uint16_t move_threshold_stop;
-    uint16_t scroll_decay_factor_q8;
-    uint16_t scroll_interval_ms;
-    uint16_t scroll_threshold_start;
-    uint16_t scroll_threshold_stop;
-    uint16_t trigger_ms;
-    bool cancel_scroll_inertia_on_ctrl;
-};
-struct inertia_motion_state {
-    int16_t velocity[INERTIA_AXIS_COUNT];
-    int16_t ema[INERTIA_AXIS_COUNT];
-    int16_t remainder_q8[INERTIA_AXIS_COUNT];
-    struct inertia_frame frame;
-    atomic_t generation;
-    bool active;
-    bool inertial;
-};
-struct inertia_pending_report {
-    uint32_t generation;
-    int16_t output[INERTIA_AXIS_COUNT];
-    bool queued;
-};
-struct inertia_data;
-struct inertia_stream {
-    struct inertia_data *owner;
-    struct inertia_motion_state move;
-    struct inertia_motion_state scroll;
-    struct k_work_delayable move_work;
-    struct k_work_delayable scroll_work;
-    struct inertia_pending_report move_report, scroll_report;
-    atomic_t move_emit_count;
-    atomic_t scroll_emit_count;
-};
-struct inertia_data {
-    const struct device *dev;
-    struct inertia_stream streams[INERTIA_STREAM_COUNT];
-    struct k_mutex lock;
-};
+/* DRIVER_TYPES */
 
 static struct keyboard_report keyboard;
 static struct k_work_q lowprio_queue;
@@ -368,7 +331,7 @@ static void test_scroll_decay(void) {
 
     /* Ctrl held: the worker drops the glide, new wheel input cancels every
      * glide and is passed on, and without the option Ctrl changes nothing. */
-    config.cancel_scroll_inertia_on_ctrl = true;
+    data.config.cancel_scroll_inertia_on_ctrl = true;
     wheel(NULL, 0, 6);
     run_scroll(0);
     keyboard.body.modifiers = MOD_RCTL;
@@ -388,7 +351,7 @@ static void test_scroll_decay(void) {
     send_to(NULL, INPUT_EV_REL, INPUT_REL_WHEEL, 3, true);
     assert(!stream(1)->scroll.active && !stream(0)->scroll.frame.open);
 
-    config.cancel_scroll_inertia_on_ctrl = false;
+    data.config.cancel_scroll_inertia_on_ctrl = false;
     wheel(NULL, 0, 6);
     assert(stream(0)->scroll.active);
     run_scroll(0);
@@ -489,7 +452,7 @@ static void test_pending_reports(void) {
     run_move(0); /* uint32 generation wrap */
     assert(sent_reports == before + 4);
     expect_scroll = true;
-    config.cancel_scroll_inertia_on_ctrl = true;
+    data.config.cancel_scroll_inertia_on_ctrl = true;
     wheel(NULL, 0, 20);
     stream(0)->scroll_work.work.handler(&stream(0)->scroll_work.work);
     assert(input_count == 1);
@@ -500,12 +463,100 @@ static void test_pending_reports(void) {
     assert(inertia_init(&processor) == 0);
 }
 
+static void test_runtime_params(void) {
+    struct inertia_params original, out;
+    assert(inertia_get_params(&processor,&original)==0);
+    assert(inertia_set_params(&processor,&original)==0); /* canonical percent representation */
+    assert(inertia_get_params(&processor,NULL)==-EINVAL);
+    assert(inertia_get_params(NULL,&out)==-ENODEV);
+    assert(inertia_set_params(&processor,NULL)==-EINVAL);
+    assert(inertia_set_params(NULL,&original)==-ENODEV);
+    struct device bad=processor;bad.api=NULL;
+    assert(inertia_get_params(&bad,&out)==-ENODEV);
+    bad=processor;bad.data=NULL;
+    assert(inertia_set_params(&bad,&original)==-ENODEV);
+    struct { size_t offset; int32_t lo,hi; } bounds[]={
+        {offsetof(struct inertia_params,trigger_ms),1,65535},
+        {offsetof(struct inertia_params,move_decay_factor_int),0,99},
+        {offsetof(struct inertia_params,move_report_interval_ms),1,65535},
+        {offsetof(struct inertia_params,move_threshold_start),1,32767},
+        {offsetof(struct inertia_params,move_threshold_stop),0,32766},
+        {offsetof(struct inertia_params,scroll_decay_factor_int),0,99},
+        {offsetof(struct inertia_params,scroll_report_interval_ms),1,65535},
+        {offsetof(struct inertia_params,scroll_threshold_start),1,32767},
+        {offsetof(struct inertia_params,scroll_threshold_stop),0,32766},
+
+    };
+    for(size_t i=0;i<sizeof(bounds)/sizeof(bounds[0]);i++) {
+        struct inertia_params p=original;
+        int32_t *field=(int32_t *)((char *)&p+bounds[i].offset);
+        *field=bounds[i].lo-1;assert(inertia_set_params(&processor,&p)==-EINVAL);
+        *field=bounds[i].hi+1;assert(inertia_set_params(&processor,&p)==-EINVAL);
+        assert(inertia_get_params(&processor,&out)==0);
+        for(size_t j=0;j<sizeof(bounds)/sizeof(bounds[0]);j++) {
+            assert(*(int32_t *)((char *)&original+bounds[j].offset)==*(int32_t *)((char *)&out+bounds[j].offset));
+        }
+        assert(original.cancel_scroll_inertia_on_ctrl==out.cancel_scroll_inertia_on_ctrl);
+        for(int upper=0;upper<2;upper++) {
+            p=original;*field=upper?bounds[i].hi:bounds[i].lo;
+            if(p.move_threshold_start<=p.move_threshold_stop) {
+                if(bounds[i].offset==offsetof(struct inertia_params,move_threshold_start))p.move_threshold_stop=0;
+                else p.move_threshold_start=32767;
+            }
+            if(p.scroll_threshold_start<=p.scroll_threshold_stop) {
+                if(bounds[i].offset==offsetof(struct inertia_params,scroll_threshold_start))p.scroll_threshold_stop=0;
+                else p.scroll_threshold_start=32767;
+            }
+            assert(inertia_set_params(&processor,&p)==0);
+            assert(inertia_set_params(&processor,&original)==0);
+        }
+    }
+    struct inertia_params stop_only=original; stop_only.scroll_threshold_stop=1;
+    assert(inertia_set_params(&processor,&stop_only)==0);
+    assert(inertia_set_params(&processor,&original)==0);
+    struct inertia_params invalid=original;
+    invalid.move_threshold_stop=invalid.move_threshold_start;
+    assert(inertia_set_params(&processor,&invalid)==-EINVAL);
+    invalid=original;invalid.scroll_threshold_stop=invalid.scroll_threshold_start;
+    assert(inertia_set_params(&processor,&invalid)==-EINVAL);
+    /* Every percentage round trips exactly through internal Q8. */
+    for(int percentage=0;percentage<100;percentage++) {
+        struct inertia_params p=original;
+        p.move_decay_factor_int=percentage;p.scroll_decay_factor_int=percentage;
+        assert(inertia_set_params(&processor,&p)==0);
+        assert(inertia_get_params(&processor,&out)==0);
+        assert(out.move_decay_factor_int==percentage && out.scroll_decay_factor_int==percentage);
+    }
+    assert(inertia_set_params(&processor,&original)==0);
+    expect_scroll=false;move(NULL,200,0);
+    uint32_t generation=stream(0)->move.generation;
+    assert(inertia_set_params(&processor,&original)==0);
+    assert(stream(0)->move.active && stream(0)->move.generation==generation);
+    stream(0)->move_work.work.handler(&stream(0)->move_work.work);
+    assert(input_count==1 && stream(0)->move_report.queued);
+    const int reports_before=sent_reports;
+    struct inertia_params changed=original;changed.cancel_scroll_inertia_on_ctrl=!original.cancel_scroll_inertia_on_ctrl;
+    assert(inertia_set_params(&processor,&changed)==0);
+    assert(!stream(0)->move.active && stream(0)->move_report.queued && "settings invalidate queued inertia");
+    drain_reports();assert(sent_reports==reports_before && !stream(0)->move_report.queued);
+    for(size_t i=0;i<INERTIA_STREAM_COUNT;i++) {
+        assert(!stream(i)->move.active && !stream(i)->scroll.active);
+        assert(!stream(i)->move_work.scheduled && !stream(i)->scroll_work.scheduled);
+    }
+    struct inertia_data other_data;
+    struct device other={.data=&other_data,.config=&config,.api=&inertia_driver_api};
+    assert(inertia_init(&other)==0);
+    assert(inertia_get_params(&other,&out)==0 && out.cancel_scroll_inertia_on_ctrl==config.cancel_scroll_inertia_on_ctrl);
+    assert(inertia_init(&processor)==0);
+    puts("inertia runtime params: bounds, coupled thresholds, all100 percentages, no-op, cancellation and queued tokens PASS");
+}
+
 int main(void) {
     config = (struct inertia_config){
         .move_decay_factor_q8 = 230, .move_interval_ms = 10, .move_threshold_start = 15,
         .move_threshold_stop = 2, .scroll_decay_factor_q8 = 200, .scroll_interval_ms = 20,
         .scroll_threshold_start = 2, .scroll_threshold_stop = 0, .trigger_ms = 30};
-    processor = (struct device){.config = &config, .data = &data, .name = "inertia"};
+    processor = (struct device){.config = &config, .data = &data, .name = "inertia", .api = &inertia_driver_api};
 
     test_routing_and_frames();
     test_move_decay();
@@ -513,6 +564,7 @@ int main(void) {
     test_cross_stream();
     test_snapshot();
     test_pending_reports();
+    test_runtime_params();
     assert(data.lock.depth == 0);
     puts("inertia driver: PASS");
     return 0;

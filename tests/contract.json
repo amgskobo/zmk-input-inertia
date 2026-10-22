@@ -29,7 +29,7 @@
     "command": "bash tests/endpoint-boundary/run.sh",
     "setup": "Run in an already resolved owner west workspace; no fetch or revision changes",
     "fixture": "tests/endpoint-boundary/module/src/boundary.c",
-    "asserts": "Eight groups: move/scroll pre-emit cancellation, cancellation completes during blocked submission, queued move/scroll discard on another pointer first axis, independent scroll node, real full-queue recovery; ordered output, unchanged manual axes, no extra accepted output after cancel",
+    "asserts": "Twelve groups: previous eight plus move/scroll settings invalidating queued tokens and completing while accepted endpoint submission is blocked; all ordered values, time and independence assertions retained",
     "repeats": 3,
     "backend": "native_sim//zmk_test_mock, production driver/ZMK HID/kernel APIs, wrapped transport only"
   },
@@ -41,7 +41,7 @@
       },
       {
         "fixture": "tests/integration/test_offline.py",
-        "asserts": "Exact supported core/dependency pins, clean sources, missing inputs, nonoverlapping project paths separate from west/config metadata, fresh outputs outside source/dependency roots including aliases, and parseable wrong custom-settings archive; identity/digest bypass controls"
+        "asserts": "Supported clean dependency pins, safe layout/output, pinned custom-settings archive/digest admission; identity and digest bypass controls"
       },
       {
         "fixture": "tests/integration/test_output_guard.py",
@@ -63,5 +63,7 @@
     "asserts": "Pending report intact against the actual input listener; queued manual X before old token and Y/SYNC after it cancels another stream on first axis, preserves exact first frame, discards stale output and clears final fields",
     "negative_control": "Append counterexample on the pre-fix source; named assertion must fail 3/3; original fixture externally preserved; bypass-manual on current source removes only the manual listener processor and requires the named stale-frame assertion 3/3",
     "automatic_entry": "tests/integration/run.sh (same standalone owner command; three repeats)"
-  }
+  },
+  "suppression_scope": "No source-button/final-frame policy. Retain scheduled motion token admission, first-axis cancellation and input-thread HID serialization; final source filter is not a global output interceptor.",
+  "runtime_settings": "Public runtime API, actual-source adapter, all100 percentage round trips and coupled thresholds; real kernel settings cancellation plus DYA registry/NVS reload; tests/README.md"
 }

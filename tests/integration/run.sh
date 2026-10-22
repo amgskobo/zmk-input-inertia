@@ -49,23 +49,16 @@ else
     # Freeze every selected project without requiring inactive uncloned ones.
     west manifest --freeze --active-only >"$work_dir/resolved-manifest.yml"
 fi
-export ZEPHYR_BASE="$workspace/zephyr"
-# Resolve against the selected manifest, including offline dependency symlinks.
-modules=()
-while IFS= read -r project; do
-    if [ -f "$project/zephyr/module.yml" ] || [ -f "$project/zephyr/module.yaml" ] ||
-       { [ -f "$project/zephyr/CMakeLists.txt" ] && [ -f "$project/zephyr/Kconfig" ]; }; then
-        modules+=("$project")
-    fi
-done < <(west list -f '{abspath}')
-export ZEPHYR_MODULES="$(IFS=';'; echo "${modules[*]}")"
-export Zephyr_DIR="$workspace/zephyr/share/zephyr-package/cmake"
+source /src/tests/integration/workspace-env.sh
+zmk_test_select_workspace "$workspace"
 
+cmake_args=()
+if [ "$variant" = dya ]; then cmake_args+=("-DEXTRA_CONF_FILE=$tests_dir/custom-settings.conf"); fi
 build_dir="$work_dir/build/smoke"
 mkdir -p "$build_dir"
 
 if ! west build -s zmk/app -d "$build_dir" -b native_sim//zmk_test_mock -- \
-    -DCONFIG_ASSERT=y -DZMK_CONFIG="$tests_dir/smoke" -DZMK_EXTRA_MODULES=/src \
+    -DCONFIG_ASSERT=y -DZMK_CONFIG="$tests_dir/smoke" -DZMK_EXTRA_MODULES=/src "${cmake_args[@]}" \
     >"$build_dir.log" 2>&1; then
     echo "FAILED: $variant smoke"
     tail -n 80 "$build_dir.log"
@@ -78,25 +71,33 @@ mkdir -p "$runtime_dir"
 
 if ! west build -s zmk/app -d "$runtime_dir" -b native_sim//zmk_test_mock -- \
     -DCONFIG_ASSERT=y -DZMK_CONFIG="$tests_dir/runtime" \
-    -DZMK_EXTRA_MODULES="/src;$tests_dir/module" >"$runtime_dir.log" 2>&1; then
+    -DZMK_EXTRA_MODULES="/src;$tests_dir/module" "${cmake_args[@]}" >"$runtime_dir.log" 2>&1; then
     echo "FAILED: runtime build"
     tail -n 80 "$runtime_dir.log"
     exit 1
 fi
 echo "PASS: runtime build"
 
-runtime_log="$work_dir/build/runtime.run.log"
-if ! timeout 30 "$runtime_dir/zephyr/zmk.exe" >"$runtime_log" 2>&1; then
-    echo "FAILED: runtime execution"
-    tail -n 80 "$runtime_log"
-    exit 1
+if [ "$variant" = dya ]; then
+    grep -q '^CONFIG_ZMK_INPUT_INERTIA_CUSTOM_SETTINGS=y' "$runtime_dir/zephyr/.config"
+else
+    ! grep -q '^CONFIG_ZMK_INPUT_INERTIA_CUSTOM_SETTINGS=y' "$runtime_dir/zephyr/.config"
 fi
-if ! grep -Fq "inertia runtime tests: PASS" "$runtime_log"; then
-    echo "FAILED: runtime tests did not report success"
-    tail -n 80 "$runtime_log"
-    exit 1
+for repeat in 1 2 3; do
+    flash=()
+    if [ "$variant" = dya ]; then flash=("--flash=$runtime_dir/flash-$repeat.bin"); fi
+    runtime_log="$work_dir/build/runtime.run-$repeat.log"
+    timeout 30 "$runtime_dir/zephyr/zmk.exe" "${flash[@]}" >"$runtime_log" 2>&1
+    grep -Fq 'inertia runtime tests: PASS' "$runtime_log"
+    if [ "$variant" = dya ]; then
+        timeout 30 "$runtime_dir/zephyr/zmk.exe" "${flash[@]}" >"$runtime_dir/reload-$repeat.log" 2>&1
+        grep -Fq 'persisted Inertia value reloads' "$runtime_dir/reload-$repeat.log"
+    fi
+done
+if [ "$variant" = dya ]; then
+    python3 "$tests_dir/check-settings-logs.py" "$work_dir/build/runtime.run-{i}.log" "$runtime_dir/reload-{i}.log"
 fi
-echo "PASS: runtime execution"
+echo "PASS: runtime execution three times; DYA includes NVS reload pairs"
 
 INERTIA_NATIVE_ARTIFACTS="$work_dir/endpoint-boundary" bash /src/tests/endpoint-boundary/run.sh
 

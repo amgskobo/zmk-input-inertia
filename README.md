@@ -203,3 +203,48 @@ focused commands, negative controls and physical acceptance gaps.
 ## License
 
 This project is licensed under the [MIT License](./LICENSE).
+
+The [responsibility review](tests/README.md) maps retained glide/frame/token/cancellation state independently of final source-button suppression. Scheduled input-thread HID transactions remain owned and tested here.
+
+## DYA Studio settings
+
+Select `CONFIG_ZMK_INPUT_INERTIA_CUSTOM_SETTINGS=y` with Custom Settings and
+`CONFIG_ZMK_CUSTOM_SETTINGS_STUDIO_RPC`. Subsystem `amgskobo__inertia` publishes ten
+values per node. The registry owns persistence and restores saved values at
+initialization; stock ZMK keeps the runtime API and DTS defaults without this
+adapter. Device identifiers are actual DTS node names, for example
+`zip_inertia.trigger_ms`. The shorter public keys below fit Zephyr storage.
+
+| Public key | Meaning / accepted value |
+| --- | --- |
+| trigger_ms | Start wait, 1..65535 ms |
+| move_decay / scroll_decay | Retained velocity per interval, 0..99 percent |
+| move_period / scroll_period | Output interval, 1..65535 ms |
+| move_start / scroll_start | Start threshold, 1..32767 |
+| move_stop / scroll_stop | Stop threshold, 0..32766 and strictly below its start |
+| cancel_on_ctrl | Boolean: cancel/prevent scroll inertia with Ctrl |
+
+[inertia_get_params / inertia_set_params](include/zmk-input-inertia/runtime.h)
+use DTS-style field names and percentages; Q8 conversion is internal. Parameter
+snapshots and all worker reads use the existing node mutex. Invalid snapshots
+leave live values/state unchanged. Unchanged snapshots preserve running motion.
+A changed snapshot cancels both motion classes on every stream and advances
+pending generations without reusing a queued token slot. Independent nodes keep
+their own values. A HID transaction already committed by the input consumer may
+finish; setters never wait for blocked endpoint submission.
+
+Scalar metadata enforces type/range; the driver also enforces coupled threshold
+ordering. An invalid combined registry snapshot stays unapplied until corrected;
+no partially valid fields are applied. Key/storage overflow fails at build time.
+Node-wide changes affect every listener that uses that instance. Associate
+`amgskobo__inertia` and the node identifier in DYA physical-layout links to expose the
+settings beside a pad. Physical Studio RPC/UI and device power-loss behavior
+require separate board acceptance.
+
+The readable subsystem ID `amgskobo__inertia` is also the persistence namespace.
+Values saved under the earlier local `amgskobo__in` ID are not migrated or
+applied; re-enter values or update the exported subsystem ID before import.
+Inertia exports use `move_period` and `scroll_period` for output intervals;
+update the earlier `move_interval`/`scroll_interval` keys when importing.
+Existing storage is not erased. The build checks both key and complete storage
+name lengths, including the terminating byte.

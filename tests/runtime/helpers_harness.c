@@ -12,26 +12,10 @@ typedef int atomic_t;
 struct k_work_delayable { int unused; };
 struct k_mutex { int unused; };
 struct device { const void *config; void *data; };
-struct inertia_motion_state {
-    int16_t velocity[INERTIA_AXIS_COUNT];
-    int16_t ema[INERTIA_AXIS_COUNT];
-    int16_t remainder_q8[INERTIA_AXIS_COUNT];
-    struct inertia_frame frame;
-    atomic_t generation;
-    bool active, inertial;
-};
-struct inertia_data;
-struct inertia_stream {
-    struct inertia_data *owner;
-    struct inertia_motion_state move, scroll;
-    struct k_work_delayable move_work, scroll_work;
-};
+#define IS_ENABLED(x) x
+#define CONFIG_ZMK_INPUT_INERTIA_TEST 1
 #define INERTIA_STREAM_COUNT 2
-struct inertia_data {
-    const struct device *dev;
-    struct inertia_stream streams[INERTIA_STREAM_COUNT];
-    struct k_mutex lock;
-};
+/* DRIVER_TYPES */
 struct zmk_input_processor_state { size_t input_device_index; };
 struct keyboard_report { struct { unsigned modifiers; } body; };
 static struct keyboard_report report;

@@ -15,7 +15,7 @@
     "bash tests/review-shared-hid/run.sh RESOLVED_WORKSPACE FRESH_OUTPUT (both pinned cores, three repeats)"
   ],
   "coverage_map": "tests/contract.json",
-  "preserved_assertions": "Relocated fixtures retain their prior assertions; no snapshot auto-accept or unique assertion removal.",
+  "preserved_assertions": "All existing arithmetic/driver/kernel/HID and 13 guard assertions retained; actual source config/state types replace copied layouts. DYA selects pinned settings archive admission and NVS reload fixtures.",
   "execution": {
     "quick": "All behavioral scenarios once; sanitizer variants where supported.",
     "full": "Same scenarios plus relevant optimization, ABI, role, kernel and supported-core checks.",
@@ -29,5 +29,7 @@
   "backends": {
     "supported": "CONFIG_INPUT_MODE_THREAD; default on both supported cores",
     "unsupported": "Synchronous input is rejected by the build guard; direct HID writers outside the input thread are not serialized"
-  }
+  },
+  "suppression_scope": "No source-button/final-frame policy. Retain scheduled motion token admission, first-axis cancellation and input-thread HID serialization; final source filter is not a global output interceptor.",
+  "runtime_settings": "Public runtime API, actual-source adapter, all100 percentage round trips and coupled thresholds; real kernel settings cancellation plus DYA registry/NVS reload; tests/README.md"
 }

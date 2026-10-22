@@ -17,3 +17,11 @@ config ZMK_INPUT_INERTIA_LOG_LEVEL
     help
       Logs contain operational state and numeric diagnostics, never input
       contents, user labels, peer addresses or authentication material.
+
+config ZMK_INPUT_INERTIA_CUSTOM_SETTINGS
+    bool "Publish inertia tuning through custom settings"
+    depends on ZMK_INPUT_PROCESSOR_INERTIA
+    depends on ZMK_CUSTOM_SETTINGS_STUDIO_RPC
+    help
+      Expose trigger, move/scroll decay, intervals, thresholds and Ctrl policy.
+      The shared registry owns persistence; stock keeps the runtime API.

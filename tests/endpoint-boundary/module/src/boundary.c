@@ -12,6 +12,7 @@
 #include <zmk/endpoints.h>
 #include <zmk/hid.h>
 #include <zmk-input-inertia/inertia_test.h>
+#include <zmk-input-inertia/runtime.h>
 
 static const struct device *const inertia = DEVICE_DT_GET(DT_NODELABEL(inertia_runtime_test));
 static const struct device *const independent = DEVICE_DT_GET(DT_NODELABEL(inertia_independent));
@@ -216,6 +217,36 @@ static void run_queue_full(void) {
     printk("PASS full real input queue recovers without burst time=%lld\n", k_uptime_get());
 }
 
+static void run_settings_cancel(bool scroll, bool blocked) {
+    axis=scroll?INPUT_REL_WHEEL:INPUT_REL_X;
+    atomic_set(&completed,0);atomic_set(&reports,0);atomic_set(&hold_send,blocked);
+    struct inertia_params original, changed, other_before, other_after;
+    __ASSERT_NO_MSG(inertia_get_params(inertia,&original)==0);
+    __ASSERT_NO_MSG(inertia_get_params(independent,&other_before)==0);
+    if(!blocked)gate_start();
+    process(axis,scroll?40:200);
+    if(blocked) { __ASSERT_NO_MSG(k_sem_take(&send_entered,K_SECONDS(1))==0); }
+    else {
+        for(int i=0;i<60 && !snapshot(scroll).report_pending;i++)k_sleep(K_MSEC(1));
+        __ASSERT_NO_MSG(snapshot(scroll).report_pending);
+    }
+    changed=original;changed.trigger_ms++;
+    int64_t begin=k_uptime_get();
+    __ASSERT_NO_MSG(inertia_set_params(inertia,&changed)==0);
+    __ASSERT(k_uptime_get()-begin<=1,"blocked endpoint delayed setting application");
+    __ASSERT(!snapshot(scroll).active,"settings failed to cancel queued inertia");
+    __ASSERT_NO_MSG(inertia_get_params(independent,&other_after)==0 && other_after.trigger_ms==other_before.trigger_ms);
+    atomic_set(&completed,1);
+    k_sem_give(blocked?&send_release:&input_release);
+    k_sleep(K_MSEC(150));
+    __ASSERT_NO_MSG(atomic_get(&reports)==(blocked?1:0));
+    __ASSERT_NO_MSG(!snapshot(scroll).report_pending);
+    const struct zmk_hid_mouse_report_body *body=&zmk_hid_get_mouse_report()->body;
+    __ASSERT_NO_MSG(body->d_x==0 && body->d_y==0 && body->d_scroll_x==0 && body->d_scroll_y==0);
+    __ASSERT_NO_MSG(inertia_set_params(inertia,&original)==0);
+    printk("PASS settings cancel axis=%u blocked=%d reports=%ld time=%lld\n",axis,blocked,(long)atomic_get(&reports),k_uptime_get());
+}
+
 static void run_tests(void *a, void *b, void *c) {
     ARG_UNUSED(a);
     ARG_UNUSED(b);
@@ -229,7 +260,9 @@ static void run_tests(void *a, void *b, void *c) {
     run_queued_cancel(true);
     run_independent_node();
     run_queue_full();
-    printk("inertia endpoint boundary: PASS groups=8\n");
+    run_settings_cancel(false,false);run_settings_cancel(true,false);
+    run_settings_cancel(false,true);run_settings_cancel(true,true);
+    printk("inertia endpoint boundary: PASS groups=12\n");
     exit(0);
 }
 
