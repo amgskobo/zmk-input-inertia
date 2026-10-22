@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "host": [
+    "bash",
+    "tests/run-docker.sh"
+  ],
+  "contracts": [
+    {
+      "fixture": "tests/runtime/helpers_harness.c",
+      "asserts": "Qualification, decay and arithmetic boundaries"
+    },
+    {
+      "fixture": "tests/runtime/driver_harness.c",
+      "asserts": "Per-stream scheduling, first-axis manual preemption, bounded pending frames, generation validation, full-queue recovery, unlocked endpoint calls and lifecycle cancellation"
+    },
+    {
+      "fixture": "tests/runtime/test_hook_harness.c",
+      "asserts": "Production test-hook behavior"
+    }
+  ],
+  "limits": "Host kernel/endpoint calls are stubs. Native cases exercise real threaded input, listeners, work/mutexes and controlled endpoint acceptance. Actual USB/BLE congestion, delivery/reconnect and physical latency remain unvalidated. Synchronous input and unrelated direct HID writers are not supported by the serialization contract.",
+  "execution": {
+    "default": "quick: every behavioral fixture and scenario under ASan/UBSan once",
+    "full": "ZMK_TEST_MODE=full: same scenarios plus optimized, coverage and existing 32-bit variants",
+    "integration": "owner native/DTS/API guards when interfaces or kernel contracts change; not a prerequisite for pure host behavior",
+    "transport": "actual ordered USB/BLE/split/power/reset evidence; archived simulation is not a passing substitute"
+  },
+  "kernel": {
+    "command": "bash tests/endpoint-boundary/run.sh",
+    "setup": "Run in an already resolved owner west workspace; no fetch or revision changes",
+    "fixture": "tests/endpoint-boundary/module/src/boundary.c",
+    "asserts": "Twelve groups: previous eight plus move/scroll settings invalidating queued tokens and completing while accepted endpoint submission is blocked; all ordered values, time and independence assertions retained",
+    "repeats": 3,
+    "backend": "native_sim//zmk_test_mock, production driver/ZMK HID/kernel APIs, wrapped transport only"
+  },
+  "infrastructure": {
+    "fixtures": [
+      {
+        "fixture": "tests/test_runtime_coverage.py",
+        "asserts": "Actual full runtime entry rejects empty, unrelated and partially measured reports; normal full entry still measures actual per-function lines/branches"
+      },
+      {
+        "fixture": "tests/integration/test_offline.py",
+        "asserts": "Supported clean dependency pins, safe layout/output, pinned custom-settings archive/digest admission; identity and digest bypass controls"
+      },
+      {
+        "fixture": "tests/integration/test_output_guard.py",
+        "asserts": "Existing directories, directory symlinks and dangling symlinks preserve prior evidence and invoke no west command"
+      },
+      {
+        "fixture": "tests/integration/test_docker_entry.py",
+        "asserts": "Both Docker/core variants, readonly source, fresh absolute output, existing/link/dangling evidence protection, retained selected online manifest on failure and child exit propagation"
+      }
+    ],
+    "entry": "tests/integration/run.sh",
+    "preparation": "Explicit pinned offline workspace; local unchanged ZMK clone and original fixture manifest; no fetch or source repair",
+    "limits": "Admission tests control dependency responses. Actual native/API/firmware fixtures separately verify unchanged stock ZMK and DYA. Physical transport remains separate."
+  },
+  "shared_hid": {
+    "command": "bash tests/review-shared-hid/run.sh RESOLVED_WORKSPACE FRESH_OUTPUT",
+    "fixture": "tests/review-shared-hid/shared_hid.c",
+    "repeats": 3,
+    "asserts": "Pending report intact against the actual input listener; queued manual X before old token and Y/SYNC after it cancels another stream on first axis, preserves exact first frame, discards stale output and clears final fields",
+    "negative_control": "Append counterexample on the pre-fix source; named assertion must fail 3/3; original fixture externally preserved; bypass-manual on current source removes only the manual listener processor and requires the named stale-frame assertion 3/3",
+    "automatic_entry": "tests/integration/run.sh (same standalone owner command; three repeats)"
+  },
+  "suppression_scope": "No source-button/final-frame policy. Retain scheduled motion token admission, first-axis cancellation and input-thread HID serialization; final source filter is not a global output interceptor.",
+  "runtime_settings": "Public runtime API, actual-source adapter, all100 percentage round trips and coupled thresholds; real kernel settings cancellation plus DYA registry/NVS reload; tests/README.md"
+}

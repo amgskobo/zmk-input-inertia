@@ -9,8 +9,8 @@ export MSYS_NO_PATHCONV=1
 repo_root="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)"
 image="${ZMK_TEST_IMAGE:-zmkfirmware/zmk-build-arm:stable}"
 
-docker run --rm \
+docker run --rm --env ZMK_TEST_MODE="${ZMK_TEST_MODE:-quick}" \
     --volume "$repo_root:/src:ro" \
     --workdir /src \
     "$image" \
-    /bin/bash /src/tests/run.sh
+    /bin/bash -lc 'cd /src && bash tests/run.sh'

@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "owner": "zmk-input-inertia",
+  "supported_cores": [
+    "stock-zmk",
+    "dya"
+  ],
+  "unsupported_core_status": "NOT APPLICABLE",
+  "commands": [
+    "bash tests/run-docker.sh",
+    "python3 -m unittest discover -s tests -p test_runtime_coverage.py -v; included in canonical host/CI entry",
+    "bash tests/run-integration-docker.sh upstream; bash tests/run-integration-docker.sh dya",
+    "python3 -m unittest discover -s tests/integration -p test_*.py -v (inside the Linux build image)",
+    "Explicit offline integration: tests/integration/run.sh; see tests/README.md for pinned workspaces, variant selection and fresh outputs",
+    "bash tests/review-shared-hid/run.sh RESOLVED_WORKSPACE FRESH_OUTPUT (both pinned cores, three repeats)"
+  ],
+  "coverage_map": "tests/contract.json",
+  "preserved_assertions": "All existing arithmetic/driver/kernel/HID and 13 guard assertions retained; actual source config/state types replace copied layouts. DYA selects pinned settings archive admission and NVS reload fixtures.",
+  "execution": {
+    "quick": "All behavioral scenarios once; sanitizer variants where supported.",
+    "full": "Same scenarios plus relevant optimization, ABI, role, kernel and supported-core checks.",
+    "outputs": "Use a fresh evidence directory; existing evidence is never overwritten.",
+    "coverage": "Each gated real function range requires measured executable lines. Actual-entry recording-tool controls reject empty/unrelated/partial reports; normal full runs retain measured coverage and all existing behavioral assertions.",
+    "ci": "Both supported-core integration variants, digest-pinned image, fresh retained results even on failure; online branch resolution and exact offline pins are distinct"
+  },
+  "gaps": [
+    "Physical USB/BLE/split delivery, timing, power and retention require matching production-board evidence."
+  ],
+  "backends": {
+    "supported": "CONFIG_INPUT_MODE_THREAD; default on both supported cores",
+    "unsupported": "Synchronous input is rejected by the build guard; direct HID writers outside the input thread are not serialized"
+  },
+  "suppression_scope": "No source-button/final-frame policy. Retain scheduled motion token admission, first-axis cancellation and input-thread HID serialization; final source filter is not a global output interceptor.",
+  "runtime_settings": "Public runtime API, actual-source adapter, all100 percentage round trips and coupled thresholds; real kernel settings cancellation plus DYA registry/NVS reload; tests/README.md"
+}

@@ -160,28 +160,48 @@ decay factorは百分率で、ビルド時に範囲検査されます。
 
 X/Yイベントは`sync`が付いたイベントで入力フレームが閉じるまで蓄積されます。deviceが送らなかった軸は、そのフレームでは0として扱います。ZMK input listenerごとにフレームと速度履歴を分離するため、2つのdeviceの軸が誤って混ざることはありません。ビルドで定義されたlistenerの範囲外のindexを持つイベントは専用の履歴を持たず、先頭listenerの履歴に混ざらないよう、変更せずにそのまま通過させます。
 
-手動のpointer／scroll入力は、listenerをまたいで競合する予約中・実行中の慣性を停止します。停止時にはatomic generation counterを更新します。遅延callbackはreport送信前にgenerationを再確認し、処理中に手動入力が状態を変更していた場合は古い出力を捨てます。
+手動のpointer／scroll入力は、同じInertiaノード内で競合する慣性を、最初の相対入力で停止します。syncを待たず、手動入力の移動量は変更せずに通します。別ノードは独立しているため、片手のpointer操作と別の手のscrollを両立できます。
 
-減衰callbackとそこからのHID reportは、Zephyrのsystem work queueではなく、
-ZMKの共有low-priority work queueで実行します。慣性が連続している間も、Bluetooth、
-split、watchdogなどのsystem workを遅延させません。
+減衰計算はZMKのlow-priority work queueで実行します。各streamが保持する未送信フレームは移動・scrollそれぞれ最大1件です。完成したX/Yを1件の非ブロッキング入力キュートークンで扱うため、片軸だけが投入されることはありません。ノード内部のinput callbackが送出直前にgenerationを確認し、手動入力で無効になった古いフレームを捨てます。処理が遅れても追い付き用の出力を蓄積しません。入力キューが満杯ならその回の出力を破棄し、後の減衰処理で再試行できます。共通プロセッサやkeymapへのlistener追加は不要です。
+
+HIDの設定・送信・クリアは、通常のZMK pointing listenerと同じ入力スレッドで実行します。これらの処理同士で共有HIDを上書きしません。送信前に入力状態のmutexを解放するため、並行するキャンセルがそのロックで送信完了を待つこともありません。ただし、endpointへ既に渡したreportは取り消せません。ZMK本体の入力キューやUSB/BLE送信の待ち時間に上限を与える修正ではなく、通常の入力経路外からHIDへ直接書く独自コードの排他も保証しません。
+
+Zephyr標準の `CONFIG_INPUT_MODE_THREAD` が必要です。同期入力モードはHID書き込みが並行するため、ビルド時に拒否します。
 
 ## テスト
 
-依存のない算術・フレームテスト:
-
 ```sh
-bash ./tests/run-docker.sh
+bash tests/run-docker.sh
+ZMK_TEST_MODE=full bash tests/run-docker.sh
+bash tests/run-integration-docker.sh upstream
+bash tests/run-integration-docker.sh dya
 ```
 
-upstream ZMKビルドとdevicetree guardテスト:
-
-```sh
-bash ./tests/run-integration-docker.sh
-```
-
-coreテストは最適化、ASan/UBSan、32-bitの3構成で実行します。統合テストは最新upstream ZMKに対してビルドし、危険なdevicetree値が想定した理由で失敗することを確認します。
+quickは全ホスト動作シナリオをASan/UBSanで実行し、テスト入口の単体検証も行います。
+fullは同じシナリオに最適化・カバレッジ・ABI構成を追加し、coreと取り出したdriver関数の
+行・分岐100%を要求します。統合検証は変更していないstock ZMKとDYAの両方で、
+実入力スレッドとカーネル境界、不正設定の拒否を確認します。
+オンラインは選択したブランチを解決し、明示的なオフライン実行は固定リビジョンを検証します。
+CIは両コアの失敗時の証跡も保存します。新しい出力先、個別コマンド、失敗対照、実機での
+未検証範囲は[所有者テストガイド](tests/README.md)を参照してください。
 
 ## ライセンス
 
 このプロジェクトは[MIT License](./LICENSE)で公開されています。
+
+## DYA Studio設定
+
+Custom Settings・Studio RPCと `CONFIG_ZMK_INPUT_INERTIA_CUSTOM_SETTINGS=y` を
+有効にすると、`amgskobo__inertia` に各ノード10項目を公開します。開始待ち、移動・スクロールの
+減衰率、間隔、開始・停止閾値、Ctrlによる停止を変更でき、保存・起動時反映は共通レジストリが担当します。
+変更時は同じノードの各入力元の慣性を停止し、待機中の古い出力を世代番号で無効にします。
+送信処理が止まっていても設定処理は待機しません。すでに確定した出力は完了できます。
+閾値の組合せが不正な間は反映せず、修正後に全項目をまとめて適用します。
+公開キー・範囲・APIは[英語ガイド](README.md#dya-studio-settings)を参照してください。
+
+設定グループID `amgskobo__inertia` は保存先の識別子も兼ねます。旧ローカル版の
+`amgskobo__in` からの自動移行は行いません。値を再設定するか、エクスポートした
+データのグループIDを更新してからインポートしてください。
+出力間隔の公開キーも `move_period` / `scroll_period` に変更しています。
+旧 `move_interval` / `scroll_interval` を含むエクスポートはキーも更新してください。
+既存の保存領域は消去しません。キーと保存先全体の長さは終端文字も含めてビルド時に検査します。

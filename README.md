@@ -157,28 +157,94 @@ Invalid intervals, threshold ranges, and threshold ordering are also rejected at
 
 X and Y events are accumulated until the event marked `sync` closes the input frame. An axis omitted by the device is treated as zero for that frame. Each ZMK input listener has independent frame and velocity history, so two devices cannot combine their axes accidentally. An event whose listener index is outside the listeners the build defines has no history of its own: it passes through unchanged instead of joining the first listener's.
 
-Manual pointer or scroll input cancels conflicting pending and active inertia across listeners. Each cancellation advances an atomic generation counter. A delayed callback compares the generation before emitting its report and discards stale output if manual input changed the state while it was running.
+Manual pointer or scroll input cancels conflicting inertia across listeners
+of the same Inertia node on the first relative event, before frame sync. The
+manual event is passed through unchanged. Separate Inertia nodes remain
+independent, for example a pointer hand and a scrolling hand.
 
-Decay callbacks and their HID reports run on ZMK's shared low-priority work
-queue, not Zephyr's system work queue. Continuous inertia therefore cannot
-delay system work such as Bluetooth, split and watchdog housekeeping.
+Decay calculations run on ZMK's low-priority work queue. Each stream has at
+most one pending complete movement frame and one pending complete scroll
+frame. A single nonblocking input-queue token carries the frame identity; X/Y
+cannot be partially admitted. The node's private input callback checks the
+cancellation generation immediately before accepting output. Stale queued
+frames are discarded. A late consumer does not accumulate catch-up frames;
+when the input queue is full, that interval is dropped and later decay can
+retry. No additional input processor or keymap listener is required.
+
+HID set/send/clear runs on the same input thread as ordinary ZMK pointing
+listeners, so those transactions cannot overwrite one another. The input-state
+mutex is released before the endpoint call: a concurrent cancellation does not
+wait for transport while holding that state boundary. A report already handed
+to the endpoint cannot be retracted. This does not bound the existing ZMK input
+queue or USB/BLE transport latency, and cannot serialize unrelated code that
+writes HID outside the normal input path.
+
+`CONFIG_INPUT_MODE_THREAD` is required (the Zephyr default). Synchronous input
+mode is rejected at build time because it would run HID writes concurrently.
 
 ## Testing
 
-Run the dependency-free arithmetic and frame tests:
-
 ```sh
-bash ./tests/run-docker.sh
+bash tests/run-docker.sh
+ZMK_TEST_MODE=full bash tests/run-docker.sh
+bash tests/run-integration-docker.sh upstream
+bash tests/run-integration-docker.sh dya
 ```
 
-Run the upstream ZMK build and devicetree guard suite:
-
-```sh
-bash ./tests/run-integration-docker.sh
-```
-
-The core suite runs optimized, ASan/UBSan, and 32-bit variants. The integration suite builds against current upstream ZMK and verifies that unsafe devicetree values fail for the expected reason.
+Quick runs every host behavior under ASan/UBSan and the infrastructure unit
+tests. Full adds the retained optimization, coverage and ABI variants, requiring
+100% line/branch coverage of the core and lifted driver functions. Integration
+uses both unchanged supported cores, real threaded input/kernel boundaries and
+invalid-configuration guards. Online manifests follow their selected branches;
+the explicit offline path checks exact pins. CI retains both variants' failure
+evidence. See [the module-owned test guide](tests/README.md) for fresh outputs,
+focused commands, negative controls and physical acceptance gaps.
 
 ## License
 
 This project is licensed under the [MIT License](./LICENSE).
+
+The [responsibility review](tests/README.md) maps retained glide/frame/token/cancellation state independently of final source-button suppression. Scheduled input-thread HID transactions remain owned and tested here.
+
+## DYA Studio settings
+
+Select `CONFIG_ZMK_INPUT_INERTIA_CUSTOM_SETTINGS=y` with Custom Settings and
+`CONFIG_ZMK_CUSTOM_SETTINGS_STUDIO_RPC`. Subsystem `amgskobo__inertia` publishes ten
+values per node. The registry owns persistence and restores saved values at
+initialization; stock ZMK keeps the runtime API and DTS defaults without this
+adapter. Device identifiers are actual DTS node names, for example
+`zip_inertia.trigger_ms`. The shorter public keys below fit Zephyr storage.
+
+| Public key | Meaning / accepted value |
+| --- | --- |
+| trigger_ms | Start wait, 1..65535 ms |
+| move_decay / scroll_decay | Retained velocity per interval, 0..99 percent |
+| move_period / scroll_period | Output interval, 1..65535 ms |
+| move_start / scroll_start | Start threshold, 1..32767 |
+| move_stop / scroll_stop | Stop threshold, 0..32766 and strictly below its start |
+| cancel_on_ctrl | Boolean: cancel/prevent scroll inertia with Ctrl |
+
+[inertia_get_params / inertia_set_params](include/zmk-input-inertia/runtime.h)
+use DTS-style field names and percentages; Q8 conversion is internal. Parameter
+snapshots and all worker reads use the existing node mutex. Invalid snapshots
+leave live values/state unchanged. Unchanged snapshots preserve running motion.
+A changed snapshot cancels both motion classes on every stream and advances
+pending generations without reusing a queued token slot. Independent nodes keep
+their own values. A HID transaction already committed by the input consumer may
+finish; setters never wait for blocked endpoint submission.
+
+Scalar metadata enforces type/range; the driver also enforces coupled threshold
+ordering. An invalid combined registry snapshot stays unapplied until corrected;
+no partially valid fields are applied. Key/storage overflow fails at build time.
+Node-wide changes affect every listener that uses that instance. Associate
+`amgskobo__inertia` and the node identifier in DYA physical-layout links to expose the
+settings beside a pad. Physical Studio RPC/UI and device power-loss behavior
+require separate board acceptance.
+
+The readable subsystem ID `amgskobo__inertia` is also the persistence namespace.
+Values saved under the earlier local `amgskobo__in` ID are not migrated or
+applied; re-enter values or update the exported subsystem ID before import.
+Inertia exports use `move_period` and `scroll_period` for output intervals;
+update the earlier `move_interval`/`scroll_interval` keys when importing.
+Existing storage is not erased. The build checks both key and complete storage
+name lengths, including the terminating byte.

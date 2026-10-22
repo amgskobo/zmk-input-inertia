@@ -1,0 +1,5 @@
+/* SPDX-License-Identifier: MIT */
+/* Negative control: manual input bypasses the node that owns the old glide. */
+&review_manual_listener {
+    /delete-property/ input-processors;
+};

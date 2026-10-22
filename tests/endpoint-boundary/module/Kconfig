@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: MIT
+config ZMK_INPUT_INERTIA_TEST
+    bool "Enable inertia hooks for the endpoint boundary fixture"
+    depends on ZMK_INPUT_PROCESSOR_INERTIA

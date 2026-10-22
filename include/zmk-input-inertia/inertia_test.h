@@ -21,6 +21,7 @@ struct inertia_test_snapshot {
     bool active;
     bool inertial;
     bool frame_open;
+    bool report_pending;
 };
 
 int inertia_test_get_snapshot(const struct device *dev, size_t stream_index, bool scroll,
