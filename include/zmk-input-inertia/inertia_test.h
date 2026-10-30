@@ -10,6 +10,7 @@
 #include <stdint.h>
 
 #include <zephyr/device.h>
+#include <zephyr/kernel.h>
 
 #include <zmk-input-inertia/inertia_core.h>
 
@@ -23,6 +24,8 @@ struct inertia_test_snapshot {
     bool frame_open;
     bool report_pending;
 };
+
+k_ticks_t inertia_test_timeout_ticks(uint16_t ms, uint32_t hz);
 
 int inertia_test_get_snapshot(const struct device *dev, size_t stream_index, bool scroll,
                               struct inertia_test_snapshot *snapshot);

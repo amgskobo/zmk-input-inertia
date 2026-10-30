@@ -247,11 +247,26 @@ static void run_settings_cancel(bool scroll, bool blocked) {
     printk("PASS settings cancel axis=%u blocked=%d reports=%ld time=%lld\n",axis,blocked,(long)atomic_get(&reports),k_uptime_get());
 }
 
+static void run_timeout_conversion(void) {
+    static const uint32_t rates[] = {1, 100, 1000, 32768, 65536, 65537, UINT32_MAX};
+    for (unsigned h = 0; h < ARRAY_SIZE(rates); ++h) {
+        const uint32_t hz = rates[h];
+        for (uint32_t ms = 0; ms <= UINT16_MAX; ++ms) {
+            const k_ticks_t expected = (k_ticks_t)(IS_ENABLED(CONFIG_TIMEOUT_64BIT) ?
+                z_tmcvt_64(ms, 1000U, hz, true, true, false) :
+                z_tmcvt_32(ms, 1000U, hz, true, true, false));
+            __ASSERT_NO_MSG(inertia_test_timeout_ticks((uint16_t)ms, hz) == expected);
+        }
+    }
+    printk("PASS timeout conversion all65536 waits at7 rates matches real Zephyr\n");
+}
+
 static void run_tests(void *a, void *b, void *c) {
     ARG_UNUSED(a);
     ARG_UNUSED(b);
     ARG_UNUSED(c);
     __ASSERT_NO_MSG(device_is_ready(inertia));
+    run_timeout_conversion();
     run_case(false, false);
     run_case(true, false);
     run_case(false, true);
@@ -262,7 +277,7 @@ static void run_tests(void *a, void *b, void *c) {
     run_queue_full();
     run_settings_cancel(false,false);run_settings_cancel(true,false);
     run_settings_cancel(false,true);run_settings_cancel(true,true);
-    printk("inertia endpoint boundary: PASS groups=12\n");
+    printk("inertia endpoint boundary: PASS groups=13\n");
     exit(0);
 }
 

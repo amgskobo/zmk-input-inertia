@@ -97,6 +97,24 @@ struct inertia_data {
     struct k_mutex lock;
 };
 
+/* Inertia intervals are uint16 milliseconds. At ordinary clock rates the
+ * entire ceiling numerator fits in uint32; higher rates split the fraction
+ * before multiplying. Only the final tick product uses the kernel's ABI. */
+static k_ticks_t inertia_ticks_from_ms(uint16_t ms, uint32_t hz) {
+    if (hz <= (UINT32_MAX - 999U) / UINT16_MAX) {
+        return ((uint32_t)ms * hz + 999U) / 1000U;
+    }
+    const uint32_t seconds = ms / 1000U;
+    const uint32_t remainder = ms % 1000U;
+    const uint32_t fraction = remainder * (hz / 1000U) +
+                              (remainder * (hz % 1000U) + 999U) / 1000U;
+    return (k_ticks_t)seconds * hz + fraction;
+}
+
+static k_timeout_t inertia_timeout_ms(uint16_t milliseconds) {
+    return K_TICKS(inertia_ticks_from_ms(milliseconds, CONFIG_SYS_CLOCK_TICKS_PER_SEC));
+}
+
 static uint16_t inertia_abs_i16(int16_t value) {
     return value < 0 ? (uint16_t)(-(int32_t)value) : (uint16_t)value;
 }
@@ -233,7 +251,7 @@ static void finish_motion_frame_locked(struct inertia_motion_state *motion,
         motion->active = true;
         motion->inertial = false;
         (void)k_work_reschedule_for_queue(zmk_workqueue_lowprio_work_q(), work,
-                                          K_MSEC(trigger_ms));
+                                          inertia_timeout_ms(trigger_ms));
         return;
     }
 
@@ -286,7 +304,8 @@ static void decay_work(struct inertia_stream *stream, bool scroll) {
         return;
     }
     if (pending->queued) {
-        (void)k_work_reschedule_for_queue(zmk_workqueue_lowprio_work_q(), work, K_MSEC(interval));
+        (void)k_work_reschedule_for_queue(zmk_workqueue_lowprio_work_q(), work,
+                                          inertia_timeout_ms(interval));
         k_mutex_unlock(&data->lock);
         return;
     }
@@ -303,7 +322,8 @@ static void decay_work(struct inertia_stream *stream, bool scroll) {
     if (err != 0) {
         pending->queued = false;
     }
-    (void)k_work_reschedule_for_queue(zmk_workqueue_lowprio_work_q(), work, K_MSEC(interval));
+    (void)k_work_reschedule_for_queue(zmk_workqueue_lowprio_work_q(), work,
+                                      inertia_timeout_ms(interval));
     k_mutex_unlock(&data->lock);
     if (err != 0) {
         LOG_WRN_ONCE("inertia input queue full: rc=%d; repeated failures suppressed", err);
@@ -579,6 +599,10 @@ int inertia_set_params(const struct device *dev, const struct inertia_params *pa
 DT_INST_FOREACH_STATUS_OKAY(INERTIA_INST)
 
 #if IS_ENABLED(CONFIG_ZMK_INPUT_INERTIA_TEST)
+k_ticks_t inertia_test_timeout_ticks(uint16_t ms, uint32_t hz) {
+    return inertia_ticks_from_ms(ms, hz);
+}
+
 __weak void inertia_test_before_emit(const struct device *dev, size_t stream_index, bool scroll) {
     ARG_UNUSED(dev);
     ARG_UNUSED(stream_index);

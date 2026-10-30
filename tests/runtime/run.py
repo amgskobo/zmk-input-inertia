@@ -23,6 +23,7 @@ import pathlib
 import re
 import subprocess
 import tempfile
+import sys
 
 import os
 
@@ -39,6 +40,7 @@ source_dir = root / "src"
 links = (source_dir / "inertia_core.c",)
 # Sources with a coverage gate of their own.
 elsewhere = ("inertia_core.c", "input_processor_inertia_custom_settings.c")
+timeouts = ("inertia_ticks_from_ms", "inertia_timeout_ms")
 helpers = (
     "inertia_abs_i16",
     "ctrl_mod_is_active",
@@ -51,6 +53,7 @@ helpers = (
     "begin_scroll_frame_locked",
 )
 fixtures = (
+    ("timeout", "input_processor_inertia.c", timeouts, ()),
     ("helpers", "input_processor_inertia.c", helpers, ()),
     ("driver", "input_processor_inertia.c", (
         "finish_motion_frame_locked",
@@ -66,7 +69,8 @@ fixtures = (
         "inertia_get_params",
         "inertia_set_params",
         "inertia_test_get_snapshot",
-    ), helpers),
+        "inertia_test_timeout_ticks",
+    ), timeouts + helpers),
     # The weak default the test build's emit hook falls back to.
     ("test_hook", "input_processor_inertia.c", ("inertia_test_before_emit",), ()),
 )
@@ -188,11 +192,8 @@ def ungated_functions():
     return missing
 
 
-missing_functions = ungated_functions()
-if missing_functions:
-    raise RuntimeError("functions no fixture gates:\n  " + "\n  ".join(missing_functions))
-
-for fixture, file_name, gated, support in fixtures:
+def render_fixture(file_name, gated, support, harness_path):
+    """Use unchanged production definitions for runtime and width fixtures."""
     source_path = source_dir / file_name
     source = source_path.read_text(encoding="utf-8")
     functions = []
@@ -207,7 +208,6 @@ for fixture, file_name, gated, support in fixtures:
             text = "__attribute__((unused)) " + text
         functions.append(f'#line {first} "{source_path}"\n{text}')
 
-    harness_path = root / "tests/runtime" / f"{fixture}_harness.c"
     harness = harness_path.read_text(encoding="utf-8")
     if "/* DRIVER_TYPES */" in harness:
         types=[]
@@ -218,11 +218,33 @@ for fixture, file_name, gated, support in fixtures:
         harness=harness.replace("/* DRIVER_TYPES */","struct inertia_data;\n"+"\n".join(types))
     marker = "/* DRIVER_FUNCTIONS */"
     resume = harness.count("\n", 0, harness.index(marker)) + 2
+    return harness.replace(marker, "\n".join(functions) +
+                           f'\n#line {resume} "{harness_path}"'), ranges
+
+
+if sys.argv[1:]:
+    if len(sys.argv) != 3 or sys.argv[1] != "--timeout":
+        raise SystemExit("usage: run.py [--timeout NEW_SOURCE_OUTPUT]")
+    output = pathlib.Path(sys.argv[2])
+    if output.exists() or output.is_symlink():
+        raise SystemExit(f"source output already exists: {output}")
+    unit, _ = render_fixture("input_processor_inertia.c", timeouts, (),
+                             root / "tests/runtime/timeout_harness.c")
+    output.write_text(unit, encoding="utf-8")
+    raise SystemExit(0)
+
+missing_functions = ungated_functions()
+if missing_functions:
+    raise RuntimeError("functions no fixture gates:\n  " + "\n  ".join(missing_functions))
+
+for fixture, file_name, gated, support in fixtures:
+    source_path = source_dir / file_name
+    generated, ranges = render_fixture(file_name, gated, support,
+                                       root / "tests/runtime" / f"{fixture}_harness.c")
     with tempfile.TemporaryDirectory(prefix=f"{fixture}-runtime-") as folder:
         work = pathlib.Path(folder)
         unit = work / "test.c"
-        unit.write_text(harness.replace(marker, "\n".join(functions) +
-                                        f'\n#line {resume} "{harness_path}"'), encoding="utf-8")
+        unit.write_text(generated, encoding="utf-8")
         for variant, flags in variants:
             binary = work / variant
             subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror", *flags,

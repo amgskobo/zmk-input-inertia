@@ -68,9 +68,15 @@ Add the following line to your keyboard's DTS file.
 
 ### 4. Integration into the Input Processor Pipeline
 
-Add `&zip_inertia` to the **end** of your `input-processors` list.
+Place `&zip_inertia` after every coordinate, mapping, scaling and gain stage
+whose output it should use. It must observe the final processed movement values.
 
-This inertia processor sends synthesized inertia events directly to the HID endpoint, bypassing any subsequent input processors. Therefore, it is critical to always place it at the **end** of the input processors pipeline so it operates on the final processed values (e.g., after scaling or scroll mapping) to avoid malfunctions.
+Original source events continue to subsequent processors unchanged. An
+independent source-button/frame filter may follow Inertia; if used, place the
+same final instance on every participating listener route. Inertia has no
+dependency on that filter. Its scheduled glide frames use an input-thread token
+and their own HID transaction, bypassing subsequent source processors. The final
+source filter therefore does not suppress or own synthesized glide output.
 
 ```dts
 &trackball_listener {
@@ -182,30 +188,6 @@ writes HID outside the normal input path.
 `CONFIG_INPUT_MODE_THREAD` is required (the Zephyr default). Synchronous input
 mode is rejected at build time because it would run HID writes concurrently.
 
-## Testing
-
-```sh
-bash tests/run-docker.sh
-ZMK_TEST_MODE=full bash tests/run-docker.sh
-bash tests/run-integration-docker.sh upstream
-bash tests/run-integration-docker.sh dya
-```
-
-Quick runs every host behavior under ASan/UBSan and the infrastructure unit
-tests. Full adds the retained optimization, coverage and ABI variants, requiring
-100% line/branch coverage of the core and lifted driver functions. Integration
-uses both unchanged supported cores, real threaded input/kernel boundaries and
-invalid-configuration guards. Online manifests follow their selected branches;
-the explicit offline path checks exact pins. CI retains both variants' failure
-evidence. See [the module-owned test guide](tests/README.md) for fresh outputs,
-focused commands, negative controls and physical acceptance gaps.
-
-## License
-
-This project is licensed under the [MIT License](./LICENSE).
-
-The [responsibility review](tests/README.md) maps retained glide/frame/token/cancellation state independently of final source-button suppression. Scheduled input-thread HID transactions remain owned and tested here.
-
 ## DYA Studio settings
 
 Select `CONFIG_ZMK_INPUT_INERTIA_CUSTOM_SETTINGS=y` with Custom Settings and
@@ -248,3 +230,29 @@ Inertia exports use `move_period` and `scroll_period` for output intervals;
 update the earlier `move_interval`/`scroll_interval` keys when importing.
 Existing storage is not erased. The build checks both key and complete storage
 name lengths, including the terminating byte.
+
+## Testing
+
+```sh
+bash tests/run-docker.sh
+ZMK_TEST_MODE=full bash tests/run-docker.sh
+bash tests/run-integration-docker.sh upstream
+bash tests/run-integration-docker.sh dya
+```
+
+Quick runs every host behavior under ASan/UBSan and the infrastructure unit
+tests. Full adds the retained optimization, coverage and ABI variants, requiring
+100% line/branch coverage of the core and lifted driver functions. Integration
+uses both unchanged supported cores, real threaded input/kernel boundaries and
+invalid-configuration guards. Online manifests follow their selected branches;
+the explicit offline path checks exact pins. CI retains both variants' failure
+evidence. See [the module-owned test guide](tests/README.md) for fresh outputs,
+focused commands, negative controls and physical acceptance gaps.
+
+The [responsibility review](tests/README.md) maps retained glide, frame, token
+and cancellation state independently of final source-button suppression.
+Scheduled input-thread HID transactions remain owned and tested here.
+
+## License
+
+This project is licensed under the [MIT License](./LICENSE).

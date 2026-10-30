@@ -16,6 +16,10 @@
     {
       "fixture": "tests/runtime/test_hook_harness.c",
       "asserts": "Production test-hook behavior"
+    },
+    {
+      "fixture": "tests/runtime/timeout_harness.c",
+      "asserts": "Actual production tick conversion and wrapper, all65536 uint16 waits at14 rates against independent wide ceil; same numeric fixture on32-bit compiler with32/64-bit tick formats. Object wide-helper guard and identified rounding/product/fraction/width controls; all previous scenarios retained."
     }
   ],
   "limits": "Host kernel/endpoint calls are stubs. Native cases exercise real threaded input, listeners, work/mutexes and controlled endpoint acceptance. Actual USB/BLE congestion, delivery/reconnect and physical latency remain unvalidated. Synchronous input and unrelated direct HID writers are not supported by the serialization contract.",
@@ -29,7 +33,7 @@
     "command": "bash tests/endpoint-boundary/run.sh",
     "setup": "Run in an already resolved owner west workspace; no fetch or revision changes",
     "fixture": "tests/endpoint-boundary/module/src/boundary.c",
-    "asserts": "Twelve groups: previous eight plus move/scroll settings invalidating queued tokens and completing while accepted endpoint submission is blocked; all ordered values, time and independence assertions retained",
+    "asserts": "Thirteen groups: previous eight plus move/scroll settings invalidating queued tokens and completing while accepted endpoint submission is blocked; added actual Zephyr timeout conversion comparison at7positive rates over every uint16 wait; all ordered values, time and independence assertions retained",
     "repeats": 3,
     "backend": "native_sim//zmk_test_mock, production driver/ZMK HID/kernel APIs, wrapped transport only"
   },
@@ -65,5 +69,6 @@
     "automatic_entry": "tests/integration/run.sh (same standalone owner command; three repeats)"
   },
   "suppression_scope": "No source-button/final-frame policy. Retain scheduled motion token admission, first-axis cancellation and input-thread HID serialization; final source filter is not a global output interceptor.",
-  "runtime_settings": "Public runtime API, actual-source adapter, all100 percentage round trips and coupled thresholds; real kernel settings cancellation plus DYA registry/NVS reload; tests/README.md"
+  "runtime_settings": "Public runtime API, actual-source adapter, all100 percentage round trips and coupled thresholds; real kernel settings cancellation plus DYA registry/NVS reload; tests/README.md",
+  "timeout_conversion": "Preserve exact Zephyr rounding and configured tick ABI for fulluint16 wait range. Native32 numerator through65536Hz, overflow-safe seconds/fraction split above. Test-only probe exposes actual conversion result and is excluded from normal firmware."
 }

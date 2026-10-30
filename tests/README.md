@@ -71,7 +71,7 @@ INERTIA_NATIVE_ARTIFACTS=/absolute/fresh-endpoint bash /module/tests/endpoint-bo
 bash /module/tests/review-shared-hid/run.sh /resolved/workspace /absolute/fresh-hid
 ```
 
-Twelve endpoint groups exercise the production driver, real kernel work/mutexes,
+Thirteen endpoint groups exercise the production driver, real kernel work/mutexes,
 threaded input and actual ZMK HID storage. They cover move/scroll pre-emit
 cancellation, cancellation during blocked submission, another pointer's first
 axis before sync, an independent scroll node and full-queue recovery without a
@@ -163,7 +163,7 @@ contract, so no production state/API/DTS/Kconfig is removed in this audit.
 | Stream/motion helpers | runtime/helpers_harness.c: same reset, independent state, qualification, manual cancellation and arithmetic |
 | Scheduled driver / queue admission | runtime/driver_harness.c: same ordered timing, first-axis cancellation, bounded pending frames, token generations, queue refusal/recovery, unlocked endpoint transaction |
 | Guarded probe | runtime/test_hook_harness.c: same test-hook behavior |
-| Real work/input/endpoint | endpoint-boundary: twelve groups, three same-binary runs/core when changed; controlled endpoint is not physical transport |
+| Real work/input/endpoint | endpoint-boundary: thirteen groups, three same-binary runs/core when changed; controlled endpoint is not physical transport |
 | Actual other listener / shared HID | review-shared-hid: pending-report integrity, manual X before stale token/Y sync, exact first frame, final clearing; named controls retained |
 
 Scheduled inertia output uses an input-thread token callback and its own HID
@@ -186,7 +186,7 @@ Four added endpoint cases retain the original eight groups: move/scroll settings
 updates discard queued tokens, and complete while an accepted endpoint report
 is blocked. Committed reports finish intact and no later output escapes; setters
 finish within one simulated ms in these controlled cases. This is not an input
-queue or physical latency bound. Both cores run the twelve-group binary three
+queue or physical latency bound. Both cores run the thirteen-group binary three
 times, alongside unchanged actual-listener/shared-HID and all 13 DTS/backend guards.
 DYA runtime also tests real registry rejection/apply and NVS persistence across
 three fresh first-boot/reload pairs of one binary. Actual Studio RPC/browser,
@@ -207,3 +207,35 @@ modules cannot supply missing dependencies. The canonical host entry runs
 `integration/test_workspace_env.py`, including failed-discovery/empty-list
 regressions and a symlinked cache with paths containing spaces. The native entry
 uses the same selection helper. This validates dependency selection, not hardware.
+
+## Native-width timeout conversion
+
+The three Inertia work reservations use the same exact ceiling as Zephyr's
+`K_MSEC`. Their inputs remain uint16 milliseconds; trigger, report period,
+qualification, decay, sensitivity, cancellation and pending-token policy are
+unchanged. Clock rates through65536Hz use a checked uint32 numerator. Higher
+rates split seconds and the fractional product before multiplication, retaining
+the configured `k_ticks_t` width without software64-bit division. No new clock
+restriction is introduced.
+
+`runtime/timeout_harness.c` gates the two actual production functions. Every
+wait0..65535 is compared with an independent wide ceiling reference at14 clock
+rates, including32768Hz, the65536/65537 branch boundary andUINT32_MAX. The same
+fixture executes on a32-bit compiler ABI with both32-bit and64-bit tick formats.
+The object probe must contain no wide arithmetic helper. Identified floor,
+unchecked-product and lost-fraction faults each must compile and fail qualified
+C assertions three times per tick format. The compiled wide-divider control
+retains numeric correctness but must fail the object-width guard. All previous
+fixtures and coverage admission controls remain selected.
+
+The additional thirteenth endpoint group calls a minimal test-config-only probe
+of the production conversion. All65536 waits at7 positive clock rates are
+compared with the actual pinned Zephyr conversion macros. The existing twelve
+work/input/endpoint/settings groups and their timing/order assertions remain.
+The guarded probe is absent from normal production firmware. Physical input,
+radio/HID latency and CPU-cycle improvements remain unmeasured.
+
+```bash
+python3 tests/runtime/run.py --timeout /absolute/fresh/timeout.c
+python3 -m unittest discover -s tests -p test_timeout_width.py -v
+```

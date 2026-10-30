@@ -13,6 +13,7 @@
 
 typedef long atomic_t;
 typedef long atomic_val_t;
+typedef int64_t k_ticks_t;
 typedef struct { int64_t ms; } k_timeout_t;
 struct k_mutex { int depth; };
 struct k_work { void (*handler)(struct k_work *work); };
@@ -44,6 +45,8 @@ struct inertia_test_snapshot {
 #define INPUT_EV_MSC 0x04
 #define K_FOREVER ((k_timeout_t){-1})
 #define K_MSEC(ms) ((k_timeout_t){(ms)})
+#define K_TICKS(value) ((k_timeout_t){(value)})
+#define CONFIG_SYS_CLOCK_TICKS_PER_SEC 1000
 #define INPUT_EV_KEY 0x01
 #define INPUT_EV_REL 0x02
 #define INPUT_REL_X 0x00
@@ -552,6 +555,7 @@ static void test_runtime_params(void) {
 }
 
 int main(void) {
+    assert(inertia_test_timeout_ticks(35, CONFIG_SYS_CLOCK_TICKS_PER_SEC) == 35);
     config = (struct inertia_config){
         .move_decay_factor_q8 = 230, .move_interval_ms = 10, .move_threshold_start = 15,
         .move_threshold_stop = 2, .scroll_decay_factor_q8 = 200, .scroll_interval_ms = 20,
