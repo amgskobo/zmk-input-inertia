@@ -72,7 +72,8 @@ Place `&zip_inertia` after every coordinate, mapping, scaling and gain stage
 whose output it should use. It must observe the final processed movement values.
 
 Original source events continue to subsequent processors unchanged. An
-independent source-button/frame filter may follow Inertia; if used, place the
+independent [`zmk-input-suppress`](https://github.com/amgskobo/zmk-input-suppress)
+source-button/frame filter may follow Inertia; if used, place the
 same final instance on every participating listener route. Inertia has no
 dependency on that filter. Its scheduled glide frames use an input-thread token
 and their own HID transaction, bypassing subsequent source processors. The final
@@ -190,7 +191,7 @@ mode is rejected at build time because it would run HID writes concurrently.
 
 ## DYA Studio settings
 
-Select `CONFIG_ZMK_INPUT_INERTIA_CUSTOM_SETTINGS=y` with Custom Settings and
+Select `CONFIG_ZMK_INPUT_INERTIA_CUSTOM_SETTINGS=y` with [Custom Settings](https://github.com/cormoran/zmk-feature-custom-settings) and
 `CONFIG_ZMK_CUSTOM_SETTINGS_STUDIO_RPC`. Subsystem `amgskobo__inertia` publishes ten
 values per node. The registry owns persistence and restores saved values at
 initialization; stock ZMK keeps the runtime API and DTS defaults without this

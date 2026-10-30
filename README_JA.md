@@ -75,7 +75,8 @@ manifest:
 最終的な移動量を受け取れるようにしてください。
 
 元のsourceイベントは変更せず後段へ渡します。独立したsourceボタン・フレーム用の
-最終フィルターをInertiaの後ろへ配置できます。使う場合は、同じ最終instanceを
+最終フィルター [`zmk-input-suppress`](https://github.com/amgskobo/zmk-input-suppress) を
+Inertiaの後ろへ配置できます。使う場合は、同じ最終instanceを
 対象listenerの全経路へ置いてください。Inertiaはそのフィルターへ依存しません。
 予約されたglideフレームは入力スレッド上のtokenから専用HID送信を行い、
 後続のsource processorを通りません。source用の最終フィルターは、
@@ -176,7 +177,7 @@ Zephyr標準の `CONFIG_INPUT_MODE_THREAD` が必要です。同期入力モー�
 
 ## DYA Studio設定
 
-Custom Settings・Studio RPCと `CONFIG_ZMK_INPUT_INERTIA_CUSTOM_SETTINGS=y` を
+[Custom Settings](https://github.com/cormoran/zmk-feature-custom-settings)・Studio RPCと `CONFIG_ZMK_INPUT_INERTIA_CUSTOM_SETTINGS=y` を
 有効にすると、`amgskobo__inertia` に各ノード10項目を公開します。開始待ち、移動・スクロールの
 減衰率、間隔、開始・停止閾値、Ctrlによる停止を変更でき、保存・起動時反映は共通レジストリが担当します。
 変更時は同じノードの各入力元の慣性を停止し、待機中の古い出力を世代番号で無効にします。
