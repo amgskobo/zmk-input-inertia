@@ -71,7 +71,7 @@ INERTIA_NATIVE_ARTIFACTS=/absolute/fresh-endpoint bash /module/tests/endpoint-bo
 bash /module/tests/review-shared-hid/run.sh /resolved/workspace /absolute/fresh-hid
 ```
 
-Seventeen endpoint groups exercise the production driver, real kernel work/mutexes,
+Nineteen endpoint groups exercise the production driver, real kernel work/mutexes,
 threaded input and actual ZMK HID storage. They cover move/scroll pre-emit
 cancellation, cancellation during blocked submission, another pointer's first
 axis before sync, an independent scroll node and full-queue recovery without a
@@ -163,7 +163,7 @@ contract, so no production state/API/DTS/Kconfig is removed in this audit.
 | Stream/motion helpers | runtime/helpers_harness.c: same reset, independent state, qualification, manual cancellation and arithmetic |
 | Scheduled driver / queue admission | runtime/driver_harness.c: same ordered timing, first-axis cancellation, bounded pending frames, token generations, queue refusal/recovery, unlocked endpoint transaction |
 | Guarded probe | runtime/test_hook_harness.c: same test-hook behavior |
-| Real work/input/endpoint | endpoint-boundary: seventeen groups, three same-binary runs/core when changed; controlled endpoint is not physical transport |
+| Real work/input/endpoint | endpoint-boundary: nineteen groups, three same-binary runs/core when changed; controlled endpoint is not physical transport |
 | Actual other listener / shared HID | review-shared-hid: pending-report integrity, manual X before stale token/Y sync, exact first frame, final clearing; named controls retained |
 
 Scheduled inertia output uses an input-thread token callback and its own HID
@@ -186,7 +186,7 @@ Four added endpoint cases retain the original eight groups: move/scroll settings
 updates discard queued tokens, and complete while an accepted endpoint report
 is blocked. Committed reports finish intact and no later output escapes; setters
 finish within one simulated ms in these controlled cases. This is not an input
-queue or physical latency bound. Both cores run the seventeen-group binary three
+queue or physical latency bound. Both cores run the nineteen-group binary three
 times, alongside unchanged actual-listener/shared-HID and all 13 DTS/backend guards.
 DYA runtime also tests real registry rejection/apply and NVS persistence across
 three fresh first-boot/reload pairs of one binary. Actual Studio RPC/browser,
@@ -257,3 +257,21 @@ PASS. The test-only `inertia_test_before_decay` hook supplies the interleaving;
 kernel cancellation, rescheduling and input-thread output use production APIs.
 The other thirteen endpoint groups and all shared-HID/configuration cases
 remain selected. Physical sensor and transport timing remain unmeasured.
+
+Two further endpoint groups hold a work callback after it unlocks state but
+before Zephyr clears its running flag. A new manual frame restarts the 20 ms
+trigger, which expires during a controlled 35 ms hold. The new move/scroll work
+must remain queued, emit the exact first report within 0–2 simulated ms of
+release, and stop completely after cancellation. The pre-repair binary fails
+`rearmed inertia work lost during cancellation` on three identical runs.
+
+Cancellation now replaces a pending timer with `K_FOREVER` using the existing
+reschedule API. It does not set Zephyr's `CANCELING` flag, which would reject
+new submissions while an older callback is still running. Already queued
+callbacks still check state and the latest timer before applying decay; the
+generation check still rejects old input tokens. No timeout is added for
+`K_FOREVER`. The helper assertions retain the same per-work disarm targets
+previously checked by `was_cancelled`; state reset, generation, exact report
+values/times and post-cancel silence assertions remain selected. This is the
+intentional replacement of the kernel cancellation mechanism, not removal of
+the output cancellation contract.

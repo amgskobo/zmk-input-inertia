@@ -20,6 +20,8 @@ int main(void) {
     inertia_test_before_emit(NULL, 7, true);
     inertia_test_before_decay(&dev, 0, false);
     inertia_test_before_decay(NULL, 7, true);
+    inertia_test_after_decay(&dev, 0, false);
+    inertia_test_after_decay(NULL, 7, true);
     puts("inertia default test hook: PASS");
     return 0;
 }

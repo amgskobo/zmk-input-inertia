@@ -46,6 +46,7 @@ helpers = (
     "ctrl_mod_is_active",
     "clear_motion_state",
     "motion_has_state",
+    "disarm_work_locked",
     "cancel_move_locked",
     "cancel_scroll_locked",
     "stream_for_event",
@@ -73,7 +74,7 @@ fixtures = (
     ), timeouts + helpers),
     # The weak default the test build's emit hook falls back to.
     ("test_hook", "input_processor_inertia.c", (
-        "inertia_test_before_emit", "inertia_test_before_decay",
+        "inertia_test_before_emit", "inertia_test_before_decay", "inertia_test_after_decay",
     ), ()),
 )
 

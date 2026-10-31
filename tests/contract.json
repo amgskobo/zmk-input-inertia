@@ -33,7 +33,7 @@
     "command": "bash tests/endpoint-boundary/run.sh",
     "setup": "Run in an already resolved owner west workspace; no fetch or revision changes",
     "fixture": "tests/endpoint-boundary/module/src/boundary.c",
-    "asserts": "Seventeen groups: thirteen retained endpoint/settings/timeout groups plus four already-running handler rearm cases (move/scroll, armed/active glide); no decay/output before the new trigger deadline, exact first axes/magnitude at20-22 simulated ms, and no output after cancellation. All previous ordered values, time and independence assertions retained",
+    "asserts": "Nineteen groups: all seventeen retained endpoint/settings/timeout/rearm groups plus two move/scroll cases whose new deadline expires before the old callback exits; queued work must recover within0-2 simulated ms of release with exact axes/magnitude and no post-cancel output. All previous ordered values, time and independence assertions retained",
     "repeats": 3,
     "backend": "native_sim//zmk_test_mock, production driver/ZMK HID/kernel APIs, wrapped transport only"
   },

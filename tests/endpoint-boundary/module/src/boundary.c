@@ -32,6 +32,9 @@ static K_SEM_DEFINE(cancel_done, 0, 1);
 static K_SEM_DEFINE(decay_entered, 0, 1);
 static K_SEM_DEFINE(decay_release, 0, 1);
 static atomic_t hold_decay;
+static K_SEM_DEFINE(decay_exiting, 0, 1);
+static K_SEM_DEFINE(decay_finish, 0, 1);
+static atomic_t hold_decay_exit;
 static atomic_t hold_send, cancel_in_hook, cancelling, completed, reports;
 static uint16_t axis;
 static int64_t cancel_begin, cancel_end;
@@ -51,6 +54,15 @@ void inertia_test_before_decay(const struct device *dev, size_t stream, bool scr
     if (dev == inertia && atomic_cas(&hold_decay, 1, 0)) {
         k_sem_give(&decay_entered);
         __ASSERT_NO_MSG(k_sem_take(&decay_release, K_SECONDS(1)) == 0);
+    }
+}
+
+void inertia_test_after_decay(const struct device *dev, size_t stream, bool scroll) {
+    ARG_UNUSED(stream);
+    ARG_UNUSED(scroll);
+    if (dev == inertia && atomic_cas(&hold_decay_exit, 1, 0)) {
+        k_sem_give(&decay_exiting);
+        __ASSERT_NO_MSG(k_sem_take(&decay_finish, K_SECONDS(1)) == 0);
     }
 }
 
@@ -315,12 +327,47 @@ static void run_running_rearm(bool scroll, bool inertial) {
            axis, inertial, restarted, first_report, k_uptime_get());
 }
 
+static void run_rearm_expired_before_exit(bool scroll) {
+    axis = scroll ? INPUT_REL_WHEEL : INPUT_REL_X;
+    atomic_set(&completed, 0);
+    atomic_set(&reports, 0);
+    atomic_set(&hold_decay_exit, 1);
+    process(axis, scroll ? 40 : 200);
+    __ASSERT_NO_MSG(k_sem_take(&decay_exiting, K_SECONDS(1)) == 0);
+    __ASSERT_NO_MSG(snapshot(scroll).inertial);
+    for (int i = 0; i < 10 && atomic_get(&reports) == 0; i++) { k_sleep(K_MSEC(1)); }
+    __ASSERT_NO_MSG(atomic_get(&reports) == 1);
+    /* The callback has unlocked state, but Zephyr still marks its work as
+     * running. Keep it preempted past the newly armed trigger deadline. */
+    process(axis, scroll ? 16 : 80);
+    int64_t restarted = k_uptime_get();
+    k_sleep(K_MSEC(35));
+    __ASSERT_NO_MSG(snapshot(scroll).active && !snapshot(scroll).inertial);
+    __ASSERT_NO_MSG(atomic_get(&reports) == 1);
+    int64_t released = k_uptime_get();
+    k_sem_give(&decay_finish);
+    k_sleep(K_MSEC(10));
+    __ASSERT(atomic_get(&reports) == 2 && snapshot(scroll).inertial,
+             "rearmed inertia work lost during cancellation");
+    __ASSERT_NO_MSG(last_report_at >= released && last_report_at <= released + 2);
+    __ASSERT_NO_MSG(last_report.d_x == (scroll ? 0 : 36));
+    __ASSERT_NO_MSG(last_report.d_scroll_y == (scroll ? 7 : 0));
+    __ASSERT_NO_MSG(last_report.d_y == 0 && last_report.d_scroll_x == 0);
+    process(axis, 0);
+    k_sleep(K_MSEC(130));
+    __ASSERT_NO_MSG(atomic_get(&reports) == 2);
+    printk("PASS expired-rearm axis=%u restarted=%lld released=%lld first_report=%lld time=%lld\n",
+           axis, restarted, released, last_report_at, k_uptime_get());
+}
+
 static void run_tests(void *a, void *b, void *c) {
     ARG_UNUSED(a);
     ARG_UNUSED(b);
     ARG_UNUSED(c);
     __ASSERT_NO_MSG(device_is_ready(inertia));
     run_timeout_conversion();
+    run_rearm_expired_before_exit(false);
+    run_rearm_expired_before_exit(true);
     run_running_rearm(false, false);
     run_running_rearm(true, false);
     run_running_rearm(false, true);
@@ -335,7 +382,7 @@ static void run_tests(void *a, void *b, void *c) {
     run_queue_full();
     run_settings_cancel(false,false);run_settings_cancel(true,false);
     run_settings_cancel(false,true);run_settings_cancel(true,true);
-    printk("inertia endpoint boundary: PASS groups=17\n");
+    printk("inertia endpoint boundary: PASS groups=19\n");
     exit(0);
 }
 

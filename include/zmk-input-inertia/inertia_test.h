@@ -31,3 +31,4 @@ int inertia_test_get_snapshot(const struct device *dev, size_t stream_index, boo
                               struct inertia_test_snapshot *snapshot);
 void inertia_test_before_emit(const struct device *dev, size_t stream_index, bool scroll);
 void inertia_test_before_decay(const struct device *dev, size_t stream_index, bool scroll);
+void inertia_test_after_decay(const struct device *dev, size_t stream_index, bool scroll);

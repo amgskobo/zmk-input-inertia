@@ -172,6 +172,9 @@ independent, for example a pointer hand and a scrolling hand.
 New manual frames restart the complete `trigger-ms` wait. If an older decay
 handler is already running when input rearms it, it leaves the newer timer
 intact and does not apply decay or emit output before that wait expires.
+Cancelling motion disarms its timer without waiting for a running handler.
+If a new trigger expires before that older handler exits, the new work remains
+queued and runs when the work queue is available.
 
 Decay calculations run on ZMK's low-priority work queue. Each stream has at
 most one pending complete movement frame and one pending complete scroll

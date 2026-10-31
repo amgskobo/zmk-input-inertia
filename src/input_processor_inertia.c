@@ -142,14 +142,22 @@ static bool motion_has_state(const struct inertia_motion_state *motion) {
            motion->remainder_q8[INERTIA_AXIS_Y] != 0;
 }
 
+static void disarm_work_locked(struct k_work_delayable *work) {
+    /* Remove the timer without putting a running handler into CANCELING.
+     * Zephyr rejects a new deadline's submission until cancellation completes,
+     * so cancel-then-reschedule can silently lose the new generation. Already
+     * queued/running handlers are rejected by motion state and timer checks. */
+    (void)k_work_reschedule_for_queue(zmk_workqueue_lowprio_work_q(), work, K_FOREVER);
+}
+
 static void cancel_move_locked(struct inertia_stream *stream) {
-    (void)k_work_cancel_delayable(&stream->move_work);
+    disarm_work_locked(&stream->move_work);
     atomic_inc(&stream->move.generation);
     clear_motion_state(&stream->move);
 }
 
 static void cancel_scroll_locked(struct inertia_stream *stream) {
-    (void)k_work_cancel_delayable(&stream->scroll_work);
+    disarm_work_locked(&stream->scroll_work);
     atomic_inc(&stream->scroll.generation);
     clear_motion_state(&stream->scroll);
 }
@@ -188,7 +196,7 @@ static void begin_move_frame_locked(struct inertia_data *data, struct inertia_st
         }
     }
 
-    (void)k_work_cancel_delayable(&target->move_work);
+    disarm_work_locked(&target->move_work);
     atomic_inc(&target->move.generation);
     if (target->move.inertial) {
         clear_motion_state(&target->move);
@@ -218,7 +226,7 @@ static void begin_scroll_frame_locked(struct inertia_data *data, struct inertia_
         }
     }
 
-    (void)k_work_cancel_delayable(&target->scroll_work);
+    disarm_work_locked(&target->scroll_work);
     atomic_inc(&target->scroll.generation);
     if (target->scroll.inertial) {
         clear_motion_state(&target->scroll);
@@ -255,7 +263,7 @@ static void finish_motion_frame_locked(struct inertia_motion_state *motion,
         return;
     }
 
-    (void)k_work_cancel_delayable(work);
+    disarm_work_locked(work);
     clear_motion_state(motion);
 }
 
@@ -344,12 +352,20 @@ static void move_decay_callback(struct k_work *work) {
     struct k_work_delayable *dwork = k_work_delayable_from_work(work);
     struct inertia_stream *stream = CONTAINER_OF(dwork, struct inertia_stream, move_work);
     decay_work(stream, false);
+#if IS_ENABLED(CONFIG_ZMK_INPUT_INERTIA_TEST)
+    inertia_test_after_decay(stream->owner->dev,
+                             (size_t)(stream - stream->owner->streams), false);
+#endif
 }
 
 static void scroll_decay_callback(struct k_work *work) {
     struct k_work_delayable *dwork = k_work_delayable_from_work(work);
     struct inertia_stream *stream = CONTAINER_OF(dwork, struct inertia_stream, scroll_work);
     decay_work(stream, true);
+#if IS_ENABLED(CONFIG_ZMK_INPUT_INERTIA_TEST)
+    inertia_test_after_decay(stream->owner->dev,
+                             (size_t)(stream - stream->owner->streams), true);
+#endif
 }
 
 /* Only this node's internal tokens reach this callback. It runs on Zephyr's
@@ -620,6 +636,12 @@ __weak void inertia_test_before_emit(const struct device *dev, size_t stream_ind
 }
 
 __weak void inertia_test_before_decay(const struct device *dev, size_t stream_index, bool scroll) {
+    ARG_UNUSED(dev);
+    ARG_UNUSED(stream_index);
+    ARG_UNUSED(scroll);
+}
+
+__weak void inertia_test_after_decay(const struct device *dev, size_t stream_index, bool scroll) {
     ARG_UNUSED(dev);
     ARG_UNUSED(stream_index);
     ARG_UNUSED(scroll);

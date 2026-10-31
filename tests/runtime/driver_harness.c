@@ -110,17 +110,13 @@ static struct k_work_delayable *k_work_delayable_from_work(struct k_work *work) 
 static int k_work_reschedule_for_queue(struct k_work_q *queue, struct k_work_delayable *work,
                                        k_timeout_t delay) {
     assert(queue == &lowprio_queue);
-    work->scheduled = true;
+    work->scheduled = delay.ms >= 0;
     work->delay_ms = delay.ms;
     work->due_ms = now_ms + delay.ms;
     return 1;
 }
 static k_ticks_t k_work_delayable_remaining_get(const struct k_work_delayable *work) {
     return work->scheduled && work->due_ms > now_ms ? work->due_ms - now_ms : 0;
-}
-static int k_work_cancel_delayable(struct k_work_delayable *work) {
-    work->scheduled = false;
-    return 0;
 }
 static struct keyboard_report *zmk_hid_get_keyboard_report(void) { return &keyboard; }
 static void zmk_hid_mouse_movement_set(int16_t x, int16_t y) {
@@ -169,6 +165,11 @@ static void inertia_test_before_decay(const struct device *dev, size_t stream_in
         before_decay = NULL;
         hook(&data.streams[stream_index]);
     }
+}
+
+static void inertia_test_after_decay(const struct device *dev, size_t stream_index, bool scroll) {
+    assert(dev == data.dev && stream_index < INERTIA_STREAM_COUNT && data.lock.depth == 0);
+    assert(scroll == expect_scroll);
 }
 
 /* DRIVER_FUNCTIONS */

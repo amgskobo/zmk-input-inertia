@@ -9,12 +9,15 @@
 #include <zmk-input-inertia/inertia_core.h>
 
 typedef int atomic_t;
+typedef struct { int ticks; } k_timeout_t;
 struct k_work_delayable { int unused; };
+struct k_work_q { int unused; };
 struct k_mutex { int unused; };
 struct device { const void *config; void *data; };
 #define IS_ENABLED(x) x
 #define CONFIG_ZMK_INPUT_INERTIA_TEST 1
 #define INERTIA_STREAM_COUNT 2
+#define K_FOREVER ((k_timeout_t){-1})
 /* DRIVER_TYPES */
 struct zmk_input_processor_state { size_t input_device_index; };
 struct keyboard_report { struct { unsigned modifiers; } body; };
@@ -22,15 +25,19 @@ static struct keyboard_report report;
 #define MOD_LCTL 1u
 #define MOD_RCTL 2u
 static struct keyboard_report *zmk_hid_get_keyboard_report(void) { return &report; }
-static int cancellations;
-static struct k_work_delayable *cancelled[8];
-static bool k_work_cancel_delayable(struct k_work_delayable *work) {
-    cancelled[cancellations++ % 8] = work;
-    return true;
+static struct k_work_q lowprio_queue;
+static struct k_work_q *zmk_workqueue_lowprio_work_q(void) { return &lowprio_queue; }
+static int disarms;
+static struct k_work_delayable *disarmed[8];
+static int k_work_reschedule_for_queue(struct k_work_q *queue,
+                                      struct k_work_delayable *work, k_timeout_t delay) {
+    assert(queue == &lowprio_queue && delay.ticks == K_FOREVER.ticks);
+    disarmed[disarms++ % 8] = work;
+    return 1;
 }
-static bool was_cancelled(int since, const struct k_work_delayable *work) {
-    for (int i = since; i < cancellations; i++) {
-        if (cancelled[i % 8] == work) {
+static bool was_disarmed(int since, const struct k_work_delayable *work) {
+    for (int i = since; i < disarms; i++) {
+        if (disarmed[i % 8] == work) {
             return true;
         }
     }
@@ -100,20 +107,20 @@ int main(void) {
     assert(stream_for_event(&data, &state) == NULL);
 
     fill(&first->move);
-    int since = cancellations;
+    int since = disarms;
     cancel_move_locked(first);
     assert(first->move.generation == 1 && !motion_has_state(&first->move));
-    assert(!first->move.inertial && was_cancelled(since, &first->move_work));
+    assert(!first->move.inertial && was_disarmed(since, &first->move_work));
     fill(&first->scroll);
-    since = cancellations;
+    since = disarms;
     cancel_scroll_locked(first);
     assert(first->scroll.generation == 1 && !motion_has_state(&first->scroll));
-    assert(!first->scroll.inertial && was_cancelled(since, &first->scroll_work));
+    assert(!first->scroll.inertial && was_disarmed(since, &first->scroll_work));
 
     first->move.frame.open = true;
-    int before = cancellations;
+    int before = disarms;
     begin_move_frame_locked(&data, first);
-    assert(cancellations == before);
+    assert(disarms == before);
     first->move.frame.open = false;
     first->scroll.active = true;
     second->move.active = true;
@@ -126,19 +133,19 @@ int main(void) {
     second->move.inertial = false;
     second->move.ema[0] = 9;
     const int move_generation = second->move.generation;
-    since = cancellations;
+    since = disarms;
     begin_move_frame_locked(&data, second);
     assert(!second->move.active && !second->move.inertial);
-    assert(was_cancelled(since, &second->move_work));
+    assert(was_disarmed(since, &second->move_work));
     for (int axis = 0; axis < INERTIA_AXIS_COUNT; ++axis) {
         assert(second->move.velocity[axis] == 0 && second->move.remainder_q8[axis] == 0);
     }
     assert(second->move.ema[0] == 9 && second->move.generation == move_generation + 1);
 
     first->scroll.frame.open = true;
-    before = cancellations;
+    before = disarms;
     begin_scroll_frame_locked(&data, first);
-    assert(cancellations == before);
+    assert(disarms == before);
     first->scroll.frame.open = false;
     first->move.active = true;
     second->scroll.active = true;
@@ -151,10 +158,10 @@ int main(void) {
     second->scroll.inertial = false;
     second->scroll.ema[0] = 9;
     const int scroll_generation = second->scroll.generation;
-    since = cancellations;
+    since = disarms;
     begin_scroll_frame_locked(&data, second);
     assert(!second->scroll.active && !second->scroll.inertial);
-    assert(was_cancelled(since, &second->scroll_work));
+    assert(was_disarmed(since, &second->scroll_work));
     for (int axis = 0; axis < INERTIA_AXIS_COUNT; ++axis) {
         assert(second->scroll.velocity[axis] == 0 && second->scroll.remainder_q8[axis] == 0);
     }
