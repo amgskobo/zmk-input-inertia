@@ -17,7 +17,12 @@ typedef int64_t k_ticks_t;
 typedef struct { int64_t ms; } k_timeout_t;
 struct k_mutex { int depth; };
 struct k_work { void (*handler)(struct k_work *work); };
-struct k_work_delayable { struct k_work work; bool scheduled; int64_t delay_ms; };
+struct k_work_delayable {
+    struct k_work work;
+    bool scheduled;
+    int64_t delay_ms;
+    int64_t due_ms;
+};
 struct k_work_q { int unused; };
 struct device { const void *config; void *data; const char *name; const void *api; };
 static const int inertia_driver_api;
@@ -68,11 +73,13 @@ static struct input_event input_events[32];
 static size_t input_count;
 static int input_result, endpoint_result;
 static int sent_reports;
+static int64_t now_ms, sent_at_ms, rearmed_at_ms;
 static int16_t sent_move[2], sent_scroll[2];
 /* Which glide the emit hook should be told about. */
 static bool expect_scroll;
 /* Runs in the gap between deciding to emit and emitting. */
 static void (*before_emit)(struct inertia_stream *stream);
+static void (*before_decay)(struct inertia_stream *stream);
 static struct inertia_data data;
 
 static atomic_val_t atomic_get(const atomic_t *value) { return *value; }
@@ -105,7 +112,11 @@ static int k_work_reschedule_for_queue(struct k_work_q *queue, struct k_work_del
     assert(queue == &lowprio_queue);
     work->scheduled = true;
     work->delay_ms = delay.ms;
+    work->due_ms = now_ms + delay.ms;
     return 1;
+}
+static k_ticks_t k_work_delayable_remaining_get(const struct k_work_delayable *work) {
+    return work->scheduled && work->due_ms > now_ms ? work->due_ms - now_ms : 0;
 }
 static int k_work_cancel_delayable(struct k_work_delayable *work) {
     work->scheduled = false;
@@ -123,6 +134,7 @@ static void zmk_hid_mouse_scroll_set(int16_t x, int16_t y) {
 static int zmk_endpoint_send_mouse_report(void) {
     assert(data.lock.depth == 0); /* transport never owns input state */
     sent_reports++;
+    sent_at_ms = now_ms;
     sent_move[0] = hid_move[0];
     sent_move[1] = hid_move[1];
     sent_scroll[0] = hid_scroll[0];
@@ -145,6 +157,16 @@ static void inertia_test_before_emit(const struct device *dev, size_t stream_ind
     if (before_emit != NULL) {
         void (*hook)(struct inertia_stream *stream) = before_emit;
         before_emit = NULL;
+        hook(&data.streams[stream_index]);
+    }
+}
+
+static void inertia_test_before_decay(const struct device *dev, size_t stream_index, bool scroll) {
+    assert(dev == data.dev && stream_index < INERTIA_STREAM_COUNT && data.lock.depth == 0);
+    assert(scroll == expect_scroll);
+    if (before_decay != NULL) {
+        void (*hook)(struct inertia_stream *stream) = before_decay;
+        before_decay = NULL;
         hook(&data.streams[stream_index]);
     }
 }
@@ -183,16 +205,74 @@ static void drain_reports(void) {
     }
 }
 
+static void run_work(struct k_work_delayable *work) {
+    if (work->scheduled && work->due_ms > now_ms) { now_ms = work->due_ms; }
+    work->scheduled = false;
+    work->work.handler(&work->work);
+}
+
 static void run_move(size_t index) {
-    stream(index)->move_work.scheduled = false;
-    stream(index)->move_work.work.handler(&stream(index)->move_work.work);
+    run_work(&stream(index)->move_work);
     drain_reports();
 }
 
 static void run_scroll(size_t index) {
-    stream(index)->scroll_work.scheduled = false;
-    stream(index)->scroll_work.work.handler(&stream(index)->scroll_work.work);
+    run_work(&stream(index)->scroll_work);
     drain_reports();
+}
+
+static void rearm_move(struct inertia_stream *s) {
+    assert(s == stream(0));
+    move(NULL, 80, 0);
+    rearmed_at_ms = now_ms;
+}
+
+static void rearm_scroll(struct inertia_stream *s) {
+    assert(s == stream(0));
+    wheel(NULL, 0, 16);
+    rearmed_at_ms = now_ms;
+}
+
+static void test_running_rearm(void) {
+    assert(inertia_init(&processor) == 0);
+    expect_scroll = false;
+    for (int inertial = 0; inertial < 2; inertial++) {
+        move(NULL, 200, 0);
+        if (inertial) { run_move(0); }
+        const int before = sent_reports;
+        before_decay = rearm_move;
+        run_move(0); /* The old handler has started when manual input rearms it. */
+        assert(sent_reports == before && "rearmed inertia worker skipped trigger delay");
+        assert(stream(0)->move.active && !stream(0)->move.inertial);
+        assert(stream(0)->move_work.scheduled && stream(0)->move_work.delay_ms == 30);
+        now_ms = rearmed_at_ms + 29;
+        stream(0)->move_work.work.handler(&stream(0)->move_work.work);
+        drain_reports();
+        assert(sent_reports == before && !stream(0)->move.inertial);
+        run_move(0);
+        assert(sent_reports == before + 1 && sent_at_ms == rearmed_at_ms + 30);
+        move(NULL, 0, 0);
+    }
+    expect_scroll = true;
+    for (int inertial = 0; inertial < 2; inertial++) {
+        wheel(NULL, 0, 40);
+        if (inertial) { run_scroll(0); }
+        const int before = sent_reports;
+        before_decay = rearm_scroll;
+        run_scroll(0);
+        assert(sent_reports == before && "rearmed inertia worker skipped trigger delay");
+        assert(stream(0)->scroll.active && !stream(0)->scroll.inertial);
+        assert(stream(0)->scroll_work.scheduled && stream(0)->scroll_work.delay_ms == 30);
+        now_ms = rearmed_at_ms + 29;
+        stream(0)->scroll_work.work.handler(&stream(0)->scroll_work.work);
+        drain_reports();
+        assert(sent_reports == before && !stream(0)->scroll.inertial);
+        run_scroll(0);
+        assert(sent_reports == before + 1 && sent_at_ms == rearmed_at_ms + 30);
+        wheel(NULL, 0, 0);
+    }
+    expect_scroll = false;
+    assert(inertia_init(&processor) == 0);
 }
 
 static void bump_move_generation(struct inertia_stream *s) { atomic_inc(&s->move.generation); }
@@ -421,14 +501,14 @@ static void test_pending_reports(void) {
     inertia_input_callback(&bad, NULL); /* no pending slot */
     int before = sent_reports;
     move(NULL, 200, 0);
-    stream(0)->move_work.work.handler(&stream(0)->move_work.work);
+    run_work(&stream(0)->move_work);
     assert(input_count == 1 && stream(0)->move_report.queued && sent_reports == before);
     struct input_event wrong = input_events[0];
     wrong.value++;
     inertia_input_callback(&wrong, NULL);
     assert(stream(0)->move_report.queued && sent_reports == before);
     int16_t saved = stream(0)->move_report.output[0];
-    stream(0)->move_work.work.handler(&stream(0)->move_work.work);
+    run_work(&stream(0)->move_work);
     assert(input_count == 1 && stream(0)->move_report.output[0] == saved);
     move(&second, 3, -2); /* first manual frame preempts the other pointer */
     assert(!stream(0)->move.active);
@@ -457,7 +537,7 @@ static void test_pending_reports(void) {
     expect_scroll = true;
     data.config.cancel_scroll_inertia_on_ctrl = true;
     wheel(NULL, 0, 20);
-    stream(0)->scroll_work.work.handler(&stream(0)->scroll_work.work);
+    run_work(&stream(0)->scroll_work);
     assert(input_count == 1);
     keyboard.body.modifiers = MOD_LCTL;
     drain_reports();
@@ -535,7 +615,7 @@ static void test_runtime_params(void) {
     uint32_t generation=stream(0)->move.generation;
     assert(inertia_set_params(&processor,&original)==0);
     assert(stream(0)->move.active && stream(0)->move.generation==generation);
-    stream(0)->move_work.work.handler(&stream(0)->move_work.work);
+    run_work(&stream(0)->move_work);
     assert(input_count==1 && stream(0)->move_report.queued);
     const int reports_before=sent_reports;
     struct inertia_params changed=original;changed.cancel_scroll_inertia_on_ctrl=!original.cancel_scroll_inertia_on_ctrl;
@@ -569,6 +649,7 @@ int main(void) {
     test_snapshot();
     test_pending_reports();
     test_runtime_params();
+    test_running_rearm();
     assert(data.lock.depth == 0);
     puts("inertia driver: PASS");
     return 0;

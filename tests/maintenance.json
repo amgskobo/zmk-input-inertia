@@ -34,5 +34,6 @@
   },
   "suppression_scope": "No source-button/final-frame policy. Retain scheduled motion token admission, first-axis cancellation and input-thread HID serialization; final source filter is not a global output interceptor.",
   "runtime_settings": "Public runtime API, actual-source adapter, all100 percentage round trips and coupled thresholds; real kernel settings cancellation plus DYA registry/NVS reload; tests/README.md",
-  "timeout_conversion": "Three delay reservations, exact ceil, complete uint16 domain; normal clock rates use native32 product/divide, high rates split fraction and retain kernel tick width. Host full coverage plus32-bit width/numeric controls for both tick ABIs; thirteen endpoint groups now include actual Zephyr conversion comparison. Physical latency NOT RUN."
+  "timeout_conversion": "Three delay reservations, exact ceil, complete uint16 domain; normal clock rates use native32 product/divide, high rates split fraction and retain kernel tick width. Host full coverage plus32-bit width/numeric controls for both tick ABIs; actual Zephyr conversion comparison retained among seventeen endpoint groups. Physical latency NOT RUN.",
+  "running_rearm": "An already-running handler must preserve a newer trigger timer without decay/output. Four host/native cases cover move/scroll and armed/active glide, explicit deadlines, exact first reports and post-cancel silence; pre-fix native binary fails the named assertion three times."
 }

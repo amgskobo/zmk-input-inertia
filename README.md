@@ -169,6 +169,10 @@ of the same Inertia node on the first relative event, before frame sync. The
 manual event is passed through unchanged. Separate Inertia nodes remain
 independent, for example a pointer hand and a scrolling hand.
 
+New manual frames restart the complete `trigger-ms` wait. If an older decay
+handler is already running when input rearms it, it leaves the newer timer
+intact and does not apply decay or emit output before that wait expires.
+
 Decay calculations run on ZMK's low-priority work queue. Each stream has at
 most one pending complete movement frame and one pending complete scroll
 frame. A single nonblocking input-queue token carries the frame identity; X/Y

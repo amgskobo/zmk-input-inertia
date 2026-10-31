@@ -20,7 +20,7 @@ and invoke Git Bash explicitly; remove the variable to restore quick mode.
 | --- | --- |
 | [test_inertia_core.c](test_inertia_core.c) | Fixed-point arithmetic, frame qualification and decay boundaries |
 | [runtime/helpers_harness.c](runtime/helpers_harness.c) | Qualification, independent state, decay and arithmetic helpers |
-| [runtime/driver_harness.c](runtime/driver_harness.c) | Scheduling, first-axis cancellation, generation checks, bounded pending frames and queue recovery |
+| [runtime/driver_harness.c](runtime/driver_harness.c) | Scheduling, running-handler rearm deadlines, first-axis cancellation, generation checks, bounded pending frames and queue recovery |
 | [runtime/test_hook_harness.c](runtime/test_hook_harness.c) | Guarded production probes |
 | [test_runtime_coverage.py](test_runtime_coverage.py) | Actual full runtime entry rejects empty, unrelated and partially measured coverage |
 
@@ -71,7 +71,7 @@ INERTIA_NATIVE_ARTIFACTS=/absolute/fresh-endpoint bash /module/tests/endpoint-bo
 bash /module/tests/review-shared-hid/run.sh /resolved/workspace /absolute/fresh-hid
 ```
 
-Thirteen endpoint groups exercise the production driver, real kernel work/mutexes,
+Seventeen endpoint groups exercise the production driver, real kernel work/mutexes,
 threaded input and actual ZMK HID storage. They cover move/scroll pre-emit
 cancellation, cancellation during blocked submission, another pointer's first
 axis before sync, an independent scroll node and full-queue recovery without a
@@ -163,7 +163,7 @@ contract, so no production state/API/DTS/Kconfig is removed in this audit.
 | Stream/motion helpers | runtime/helpers_harness.c: same reset, independent state, qualification, manual cancellation and arithmetic |
 | Scheduled driver / queue admission | runtime/driver_harness.c: same ordered timing, first-axis cancellation, bounded pending frames, token generations, queue refusal/recovery, unlocked endpoint transaction |
 | Guarded probe | runtime/test_hook_harness.c: same test-hook behavior |
-| Real work/input/endpoint | endpoint-boundary: thirteen groups, three same-binary runs/core when changed; controlled endpoint is not physical transport |
+| Real work/input/endpoint | endpoint-boundary: seventeen groups, three same-binary runs/core when changed; controlled endpoint is not physical transport |
 | Actual other listener / shared HID | review-shared-hid: pending-report integrity, manual X before stale token/Y sync, exact first frame, final clearing; named controls retained |
 
 Scheduled inertia output uses an input-thread token callback and its own HID
@@ -186,7 +186,7 @@ Four added endpoint cases retain the original eight groups: move/scroll settings
 updates discard queued tokens, and complete while an accepted endpoint report
 is blocked. Committed reports finish intact and no later output escapes; setters
 finish within one simulated ms in these controlled cases. This is not an input
-queue or physical latency bound. Both cores run the thirteen-group binary three
+queue or physical latency bound. Both cores run the seventeen-group binary three
 times, alongside unchanged actual-listener/shared-HID and all 13 DTS/backend guards.
 DYA runtime also tests real registry rejection/apply and NVS persistence across
 three fresh first-boot/reload pairs of one binary. Actual Studio RPC/browser,
@@ -239,3 +239,21 @@ radio/HID latency and CPU-cycle improvements remain unmeasured.
 python3 tests/runtime/run.py --timeout /absolute/fresh/timeout.c
 python3 -m unittest discover -s tests -p test_timeout_width.py -v
 ```
+
+## Rearming an already-running decay handler
+
+Four endpoint groups pause an actual work handler before it takes the state
+mutex, then complete a new manual frame and resume the old handler. Move and
+scroll each run from an armed frame and an active glide. No decay or report
+may occur during the new 20 ms trigger wait; the first report must arrive
+20–22 simulated ms after rearming with the exact expected axes and magnitude.
+Cancellation then prohibits all further reports. The host fixture also checks
+the tick immediately before expiry and the exact deadline with explicit time.
+
+The pre-fix native binary fails the named
+`rearmed inertia worker skipped trigger delay` assertion on three identical
+runs. Its raw output and binary identity are review evidence, not a product
+PASS. The test-only `inertia_test_before_decay` hook supplies the interleaving;
+kernel cancellation, rescheduling and input-thread output use production APIs.
+The other thirteen endpoint groups and all shared-HID/configuration cases
+remain selected. Physical sensor and transport timing remain unmeasured.

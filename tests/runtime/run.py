@@ -72,7 +72,9 @@ fixtures = (
         "inertia_test_timeout_ticks",
     ), timeouts + helpers),
     # The weak default the test build's emit hook falls back to.
-    ("test_hook", "input_processor_inertia.c", ("inertia_test_before_emit",), ()),
+    ("test_hook", "input_processor_inertia.c", (
+        "inertia_test_before_emit", "inertia_test_before_decay",
+    ), ()),
 )
 
 

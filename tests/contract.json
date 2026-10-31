@@ -11,7 +11,7 @@
     },
     {
       "fixture": "tests/runtime/driver_harness.c",
-      "asserts": "Per-stream scheduling, first-axis manual preemption, bounded pending frames, generation validation, full-queue recovery, unlocked endpoint calls and lifecycle cancellation"
+      "asserts": "Per-stream scheduling, already-running handler rearm deadlines for move/scroll before and after glide starts, first-axis manual preemption, bounded pending frames, generation validation, full-queue recovery, unlocked endpoint calls and lifecycle cancellation"
     },
     {
       "fixture": "tests/runtime/test_hook_harness.c",
@@ -33,7 +33,7 @@
     "command": "bash tests/endpoint-boundary/run.sh",
     "setup": "Run in an already resolved owner west workspace; no fetch or revision changes",
     "fixture": "tests/endpoint-boundary/module/src/boundary.c",
-    "asserts": "Thirteen groups: previous eight plus move/scroll settings invalidating queued tokens and completing while accepted endpoint submission is blocked; added actual Zephyr timeout conversion comparison at7positive rates over every uint16 wait; all ordered values, time and independence assertions retained",
+    "asserts": "Seventeen groups: thirteen retained endpoint/settings/timeout groups plus four already-running handler rearm cases (move/scroll, armed/active glide); no decay/output before the new trigger deadline, exact first axes/magnitude at20-22 simulated ms, and no output after cancellation. All previous ordered values, time and independence assertions retained",
     "repeats": 3,
     "backend": "native_sim//zmk_test_mock, production driver/ZMK HID/kernel APIs, wrapped transport only"
   },

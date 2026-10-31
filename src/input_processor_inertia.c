@@ -289,12 +289,22 @@ static void decay_work(struct inertia_stream *stream, bool scroll) {
     struct inertia_motion_state *motion = scroll ? &stream->scroll : &stream->move;
     struct inertia_pending_report *pending = scroll ? &stream->scroll_report : &stream->move_report;
     struct k_work_delayable *work = scroll ? &stream->scroll_work : &stream->move_work;
+#if IS_ENABLED(CONFIG_ZMK_INPUT_INERTIA_TEST)
+    inertia_test_before_decay(data->dev, (size_t)(stream - data->streams), scroll);
+#endif
     k_mutex_lock(&data->lock, K_FOREVER);
     uint16_t interval = scroll ? config->scroll_interval_ms : config->move_interval_ms;
     uint16_t factor = scroll ? config->scroll_decay_factor_q8 : config->move_decay_factor_q8;
     uint16_t threshold = scroll ? config->scroll_threshold_stop : config->move_threshold_stop;
 
     if (!motion->active) {
+        k_mutex_unlock(&data->lock);
+        return;
+    }
+    /* Cancellation cannot stop a handler that is already running. Manual
+     * input may have rearmed this same work while it waited for the lock;
+     * leave that newer trigger/interval intact instead of decaying early. */
+    if (k_work_delayable_remaining_get(work) > 0) {
         k_mutex_unlock(&data->lock);
         return;
     }
@@ -604,6 +614,12 @@ k_ticks_t inertia_test_timeout_ticks(uint16_t ms, uint32_t hz) {
 }
 
 __weak void inertia_test_before_emit(const struct device *dev, size_t stream_index, bool scroll) {
+    ARG_UNUSED(dev);
+    ARG_UNUSED(stream_index);
+    ARG_UNUSED(scroll);
+}
+
+__weak void inertia_test_before_decay(const struct device *dev, size_t stream_index, bool scroll) {
     ARG_UNUSED(dev);
     ARG_UNUSED(stream_index);
     ARG_UNUSED(scroll);

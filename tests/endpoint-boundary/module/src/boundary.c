@@ -29,15 +29,29 @@ static K_SEM_DEFINE(send_entered, 0, 1);
 static K_SEM_DEFINE(send_release, 0, 1);
 static K_SEM_DEFINE(cancel_start, 0, 1);
 static K_SEM_DEFINE(cancel_done, 0, 1);
+static K_SEM_DEFINE(decay_entered, 0, 1);
+static K_SEM_DEFINE(decay_release, 0, 1);
+static atomic_t hold_decay;
 static atomic_t hold_send, cancel_in_hook, cancelling, completed, reports;
 static uint16_t axis;
 static int64_t cancel_begin, cancel_end;
+static int64_t last_report_at;
+static struct zmk_hid_mouse_report_body last_report;
 
 static void process(uint16_t code, int32_t value) {
     struct input_event event = {.type = INPUT_EV_REL, .code = code, .value = value, .sync = true};
     struct zmk_input_processor_state state = {.input_device_index = 0};
     __ASSERT_NO_MSG(zmk_input_processor_handle_event(inertia, &event, 0, 0, &state) ==
                     ZMK_INPUT_PROC_CONTINUE);
+}
+
+void inertia_test_before_decay(const struct device *dev, size_t stream, bool scroll) {
+    ARG_UNUSED(stream);
+    ARG_UNUSED(scroll);
+    if (dev == inertia && atomic_cas(&hold_decay, 1, 0)) {
+        k_sem_give(&decay_entered);
+        __ASSERT_NO_MSG(k_sem_take(&decay_release, K_SECONDS(1)) == 0);
+    }
 }
 
 void inertia_test_before_emit(const struct device *dev, size_t stream, bool scroll) {
@@ -57,6 +71,8 @@ int __wrap_zmk_endpoint_send_mouse_report(void) {
     const struct zmk_hid_mouse_report_body *body = &zmk_hid_get_mouse_report()->body;
     __ASSERT_NO_MSG(axis == INPUT_REL_X ? body->d_x != 0 : body->d_scroll_y != 0);
     atomic_inc(&reports);
+    last_report = *body;
+    last_report_at = k_uptime_get();
     if (atomic_cas(&hold_send, 1, 0)) {
         k_sem_give(&send_entered);
         __ASSERT_NO_MSG(k_sem_take(&send_release, K_SECONDS(1)) == 0);
@@ -261,12 +277,54 @@ static void run_timeout_conversion(void) {
     printk("PASS timeout conversion all65536 waits at7 rates matches real Zephyr\n");
 }
 
+static void run_running_rearm(bool scroll, bool inertial) {
+    axis = scroll ? INPUT_REL_WHEEL : INPUT_REL_X;
+    atomic_set(&completed, 0);
+    atomic_set(&reports, 0);
+    process(axis, scroll ? 40 : 200);
+    if (inertial) {
+        k_sleep(K_MSEC(50));
+        __ASSERT_NO_MSG(snapshot(scroll).inertial && atomic_get(&reports) == 1);
+    }
+    atomic_set(&hold_decay, 1);
+    __ASSERT_NO_MSG(k_sem_take(&decay_entered, K_SECONDS(1)) == 0);
+    int before = atomic_get(&reports);
+    /* An already-running work callback cannot be stopped by asynchronous
+     * cancellation. New input must still get its complete trigger delay. */
+    process(axis, scroll ? 16 : 80);
+    int64_t restarted = k_uptime_get();
+    struct inertia_test_snapshot armed = snapshot(scroll);
+    __ASSERT_NO_MSG(armed.active && !armed.inertial && !armed.report_pending);
+    k_sem_give(&decay_release);
+    k_sleep(K_MSEC(10)); /* trigger-ms is 20; the old handler resumes at once. */
+    __ASSERT(atomic_get(&reports) == before && !snapshot(scroll).inertial,
+             "rearmed inertia worker skipped trigger delay");
+    __ASSERT_NO_MSG(snapshot(scroll).ema[scroll ? INERTIA_AXIS_Y : INERTIA_AXIS_X] ==
+                    armed.ema[scroll ? INERTIA_AXIS_Y : INERTIA_AXIS_X]);
+    k_sleep(K_MSEC(25));
+    __ASSERT_NO_MSG(atomic_get(&reports) == before + 1 && snapshot(scroll).inertial);
+    __ASSERT_NO_MSG(last_report_at >= restarted + 20 && last_report_at <= restarted + 22);
+    __ASSERT_NO_MSG(last_report.d_x == (scroll ? 0 : inertial ? 36 : 81));
+    __ASSERT_NO_MSG(last_report.d_scroll_y == (scroll ? inertial ? 7 : 15 : 0));
+    __ASSERT_NO_MSG(last_report.d_y == 0 && last_report.d_scroll_x == 0);
+    const int64_t first_report = last_report_at;
+    process(axis, 0);
+    k_sleep(K_MSEC(130));
+    __ASSERT_NO_MSG(atomic_get(&reports) == before + 1);
+    printk("PASS running-rearm axis=%u inertial=%d restarted=%lld first_report=%lld time=%lld\n",
+           axis, inertial, restarted, first_report, k_uptime_get());
+}
+
 static void run_tests(void *a, void *b, void *c) {
     ARG_UNUSED(a);
     ARG_UNUSED(b);
     ARG_UNUSED(c);
     __ASSERT_NO_MSG(device_is_ready(inertia));
     run_timeout_conversion();
+    run_running_rearm(false, false);
+    run_running_rearm(true, false);
+    run_running_rearm(false, true);
+    run_running_rearm(true, true);
     run_case(false, false);
     run_case(true, false);
     run_case(false, true);
@@ -277,7 +335,7 @@ static void run_tests(void *a, void *b, void *c) {
     run_queue_full();
     run_settings_cancel(false,false);run_settings_cancel(true,false);
     run_settings_cancel(false,true);run_settings_cancel(true,true);
-    printk("inertia endpoint boundary: PASS groups=13\n");
+    printk("inertia endpoint boundary: PASS groups=17\n");
     exit(0);
 }
 
