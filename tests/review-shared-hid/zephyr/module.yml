@@ -1,0 +1,4 @@
+name: inertia-review-shared-hid
+build:
+  cmake: .
+  kconfig: Kconfig

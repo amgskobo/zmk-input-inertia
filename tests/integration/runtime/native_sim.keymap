@@ -4,10 +4,30 @@
  */
 
 #include <behaviors.dtsi>
+#include <physical_layouts.dtsi>
+#include <dt-bindings/zmk/matrix_transform.h>
 #include <dt-bindings/zmk/keys.h>
 #include <dt-bindings/zmk/kscan_mock.h>
 
 / {
+    physical_layout {
+        compatible = "zmk,physical-layout";
+        display-name = "Test";
+        transform = <&transform>;
+        keys = <&key_physical_attrs 100 100 0 0 0 0 0>,
+               <&key_physical_attrs 100 100 100 0 0 0 0>,
+               <&key_physical_attrs 100 100 0 100 0 0 0>,
+               <&key_physical_attrs 100 100 100 100 0 0 0>;
+    };
+    transform: transform {
+        compatible = "zmk,matrix-transform";
+        rows = <2>; columns = <2>;
+        map = <RC(0,0) RC(0,1) RC(1,0) RC(1,1)>;
+    };
+    independent_runtime: glide_other {
+        compatible = "zmk,input-processor-inertia";
+        #input-processor-cells = <0>;
+    };
     keymap {
         compatible = "zmk,keymap";
 
@@ -16,7 +36,7 @@
         };
     };
 
-    inertia_runtime_test: inertia_runtime_test {
+    inertia_runtime_test: glide_runtime {
         compatible = "zmk,input-processor-inertia";
         #input-processor-cells = <0>;
         trigger-ms = <20>;

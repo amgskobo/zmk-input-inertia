@@ -20,13 +20,54 @@ concurrency:
   group: test-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
+env:
+  ZMK_TEST_IMAGE: zmkfirmware/zmk-build-arm@sha256:edb1c953438c6f720ddb79c3762f3972013b7fbbaf4fff3592fc869983e7afc5
+  ZMK_TEST_MODE: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'full' || 'quick' }}
+
 jobs:
-  core:
+  runtime:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v5
-      - name: Run fixed-point and frame contract tests
-        run: bash ./tests/run-docker.sh
-      - name: Build against upstream ZMK
-        run: bash ./tests/run-integration-docker.sh
+      - name: Exercise all core, driver and infrastructure scenarios
+        run: bash tests/run-docker.sh
+
+  firmware:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [upstream, dya]
+    steps:
+      - uses: actions/checkout@v5
+      - name: Exercise native runtime, endpoint boundaries and configuration guards
+        env:
+          ZMK_TEST_OUTPUT: ${{ runner.temp }}/inertia-results/${{ matrix.variant }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/inertia-results"
+          set -o pipefail
+          bash ./tests/run-integration-docker.sh ${{ matrix.variant }} 2>&1 | tee "$RUNNER_TEMP/inertia-results/${{ matrix.variant }}.log"
+      - name: Preserve ordered results and source identities
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: inertia-${{ matrix.variant }}-${{ github.run_attempt }}
+          include-hidden-files: true
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/inertia-results/${{ matrix.variant }}.log
+            ${{ runner.temp }}/inertia-results/${{ matrix.variant }}/resolved-manifest.yml
+            ${{ runner.temp }}/inertia-results/${{ matrix.variant }}/build/*.log
+            ${{ runner.temp }}/inertia-results/${{ matrix.variant }}/build/*/zephyr/.config
+            ${{ runner.temp }}/inertia-results/${{ matrix.variant }}/build/*/zephyr/zephyr.dts
+            ${{ runner.temp }}/inertia-results/${{ matrix.variant }}/build/*/zephyr/zmk.exe
+            ${{ runner.temp }}/inertia-results/${{ matrix.variant }}/build/guards/*.log
+            ${{ runner.temp }}/inertia-results/${{ matrix.variant }}/endpoint-boundary
+            ${{ runner.temp }}/inertia-results/${{ matrix.variant }}/shared-hid/*.log
+            ${{ runner.temp }}/inertia-results/${{ matrix.variant }}/shared-hid/*.exit
+            ${{ runner.temp }}/inertia-results/${{ matrix.variant }}/shared-hid/*.sha256
+            ${{ runner.temp }}/inertia-results/${{ matrix.variant }}/shared-hid/build/zephyr/.config
+            ${{ runner.temp }}/inertia-results/${{ matrix.variant }}/shared-hid/build/zephyr/zephyr.dts
+            ${{ runner.temp }}/inertia-results/${{ matrix.variant }}/shared-hid/build/zephyr/zmk.exe
