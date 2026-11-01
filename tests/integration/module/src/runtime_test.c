@@ -109,6 +109,16 @@ static bool verify_reload(void) {
 }
 static void test_registry(void) {
     const struct zmk_custom_setting *s=trigger_setting();
+    const struct device *other=DEVICE_DT_GET(DT_NODELABEL(independent_runtime));
+    struct inertia_params original_other, tuned_other;
+    __ASSERT_NO_MSG(inertia_get_params(other,&original_other)==0 && original_other.trigger_ms==35);
+    tuned_other=original_other;tuned_other.trigger_ms=60000;
+    __ASSERT_NO_MSG(inertia_set_params(other,&tuned_other)==0);
+    struct input_event other_event=relative_event(INPUT_REL_X,200,true);
+    struct zmk_input_processor_state other_state={.input_device_index=0};
+    __ASSERT_NO_MSG(zmk_input_processor_handle_event(other,&other_event,0,0,&other_state)==ZMK_INPUT_PROC_CONTINUE);
+    struct inertia_test_snapshot other_before, other_after;
+    __ASSERT_NO_MSG(inertia_test_get_snapshot(other,0,false,&other_before)==0 && other_before.active);
     struct zmk_custom_setting_value value=ZMK_CUSTOM_SETTING_VALUE_INT32(0);
     __ASSERT_NO_MSG(zmk_custom_setting_write(s,&value,ZMK_CUSTOM_SETTING_WRITE_MODE_MEMORY)!=0);
     value=(struct zmk_custom_setting_value)ZMK_CUSTOM_SETTING_VALUE_BOOL(true);
@@ -121,8 +131,15 @@ static void test_registry(void) {
     __ASSERT_NO_MSG(zmk_custom_setting_write(period_setting("glide_runtime.scroll_period"),&value,ZMK_CUSTOM_SETTING_WRITE_MODE_PERSIST)==0);
     struct inertia_params params;
     __ASSERT_NO_MSG(inertia_get_params(inertia,&params)==0 && params.trigger_ms==37);
-    const struct device *other=DEVICE_DT_GET(DT_NODELABEL(independent_runtime));
+    __ASSERT(inertia_get_params(other,&params)==0 && params.trigger_ms==60000,
+             "unrelated settings event reset another node");
+    __ASSERT_NO_MSG(inertia_test_get_snapshot(other,0,false,&other_after)==0);
+    __ASSERT_NO_MSG(other_after.active && other_after.generation==other_before.generation);
+    other_event.value=0;
+    __ASSERT_NO_MSG(zmk_input_processor_handle_event(other,&other_event,0,0,&other_state)==ZMK_INPUT_PROC_CONTINUE);
+    __ASSERT_NO_MSG(inertia_set_params(other,&original_other)==0);
     __ASSERT_NO_MSG(inertia_get_params(other,&params)==0 && params.trigger_ms==35);
+    printk("PASS: unrelated node runtime config and active generation survive registry writes\n");
     printk("PASS: Inertia registry range/type rejection, per-node apply and NVS save\n");
 }
 #endif

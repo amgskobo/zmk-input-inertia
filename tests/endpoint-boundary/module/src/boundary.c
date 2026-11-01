@@ -35,7 +35,11 @@ static atomic_t hold_decay;
 static K_SEM_DEFINE(decay_exiting, 0, 1);
 static K_SEM_DEFINE(decay_finish, 0, 1);
 static atomic_t hold_decay_exit;
+static K_SEM_DEFINE(hid_set_entered, 0, 1);
+static K_SEM_DEFINE(hid_set_release, 0, 1);
+static atomic_t hold_hid_set;
 static atomic_t hold_send, cancel_in_hook, cancelling, completed, reports;
+static atomic_t endpoint_failures_left, endpoint_failures;
 static uint16_t axis;
 static int64_t cancel_begin, cancel_end;
 static int64_t last_report_at;
@@ -76,6 +80,24 @@ void inertia_test_before_emit(const struct device *dev, size_t stream, bool scro
 }
 
 int __wrap_zmk_endpoint_send_mouse_report(void);
+void __real_zmk_hid_mouse_movement_set(int16_t x, int16_t y);
+void __real_zmk_hid_mouse_scroll_set(int16_t x, int16_t y);
+void __wrap_zmk_hid_mouse_movement_set(int16_t x, int16_t y);
+void __wrap_zmk_hid_mouse_scroll_set(int16_t x, int16_t y);
+static void pause_hid_set(void) {
+    if (atomic_cas(&hold_hid_set, 1, 0)) {
+        k_sem_give(&hid_set_entered);
+        __ASSERT_NO_MSG(k_sem_take(&hid_set_release, K_SECONDS(1)) == 0);
+    }
+}
+void __wrap_zmk_hid_mouse_movement_set(int16_t x, int16_t y) {
+    __real_zmk_hid_mouse_movement_set(x, y);
+    if (x != 0 || y != 0) { pause_hid_set(); }
+}
+void __wrap_zmk_hid_mouse_scroll_set(int16_t x, int16_t y) {
+    __real_zmk_hid_mouse_scroll_set(x, y);
+    if (x != 0 || y != 0) { pause_hid_set(); }
+}
 int __wrap_zmk_endpoint_send_mouse_report(void) {
     /* Substitute only the transport boundary. The complete production driver,
      * actual ZMK HID storage and real kernel mutex/work/thread APIs are used. */
@@ -92,6 +114,11 @@ int __wrap_zmk_endpoint_send_mouse_report(void) {
     /* Acceptance precedes the controlled hold. A submitted report cannot be retracted. */
     printk("REPORT axis=%u x=%d y=%d wheel=%d hwheel=%d time=%lld\n", axis, body->d_x,
            body->d_y, body->d_scroll_y, body->d_scroll_x, k_uptime_get());
+    if (atomic_get(&endpoint_failures_left) > 0) {
+        atomic_dec(&endpoint_failures_left);
+        atomic_inc(&endpoint_failures);
+        return -EIO;
+    }
     return 0;
 }
 
@@ -360,12 +387,162 @@ static void run_rearm_expired_before_exit(bool scroll) {
            axis, restarted, released, last_report_at, k_uptime_get());
 }
 
+static void run_delayed_consumer_period(bool scroll) {
+    axis = scroll ? INPUT_REL_WHEEL : INPUT_REL_X;
+    atomic_set(&completed, 0);
+    atomic_set(&reports, 0);
+    gate_start();
+    process(axis, scroll ? 40 : 200);
+    for (int i = 0; i < 60 && !snapshot(scroll).report_pending; i++) { k_sleep(K_MSEC(1)); }
+    __ASSERT_NO_MSG(snapshot(scroll).report_pending);
+    k_sleep(K_MSEC(90)); /* Resume just before the next 100 ms work deadline. */
+    __ASSERT_NO_MSG(atomic_get(&reports) == 0);
+    k_sem_give(&input_release);
+    k_sleep(K_MSEC(50));
+    __ASSERT(atomic_get(&reports) == 1,
+             "delayed consumer compressed inertia interval");
+    int64_t first = last_report_at;
+    __ASSERT_NO_MSG(last_report.d_x == (scroll ? 0 : 90));
+    __ASSERT_NO_MSG(last_report.d_scroll_y == (scroll ? 17 : 0));
+    k_sleep(K_MSEC(65));
+    __ASSERT_NO_MSG(atomic_get(&reports) == 2);
+    __ASSERT_NO_MSG(last_report_at - first >= 100 && last_report_at - first <= 102);
+    __ASSERT_NO_MSG(last_report.d_x == (scroll ? 0 : 81));
+    __ASSERT_NO_MSG(last_report.d_scroll_y == (scroll ? 14 : 0));
+    int64_t second = last_report_at;
+    process(axis, 0);
+    k_sleep(K_MSEC(130));
+    __ASSERT_NO_MSG(atomic_get(&reports) == 2);
+    printk("PASS delayed-consumer-period axis=%u first=%lld second=%lld time=%lld\n",
+           axis, first, second, k_uptime_get());
+}
+
+static void run_hid_handoff_period(bool scroll) {
+    axis = scroll ? INPUT_REL_WHEEL : INPUT_REL_X;
+    atomic_set(&completed, 0);
+    atomic_set(&reports, 0);
+    atomic_set(&hold_hid_set, 1);
+    process(axis, scroll ? 40 : 200);
+    __ASSERT_NO_MSG(k_sem_take(&hid_set_entered, K_SECONDS(1)) == 0);
+    k_sleep(K_MSEC(120)); /* Preempt the input thread after admission, before send. */
+    __ASSERT_NO_MSG(atomic_get(&reports) == 0);
+    k_sem_give(&hid_set_release);
+    k_sleep(K_MSEC(50));
+    __ASSERT(atomic_get(&reports) == 1,
+             "HID handoff compressed inertia interval");
+    int64_t first = last_report_at;
+    __ASSERT_NO_MSG(last_report.d_x == (scroll ? 0 : 90));
+    __ASSERT_NO_MSG(last_report.d_scroll_y == (scroll ? 17 : 0));
+    k_sleep(K_MSEC(65));
+    __ASSERT_NO_MSG(atomic_get(&reports) == 2);
+    __ASSERT_NO_MSG(last_report_at - first >= 100 && last_report_at - first <= 102);
+    __ASSERT_NO_MSG(last_report.d_x == (scroll ? 0 : 81));
+    __ASSERT_NO_MSG(last_report.d_scroll_y == (scroll ? 14 : 0));
+    int64_t second = last_report_at;
+    process(axis, 0);
+    k_sleep(K_MSEC(130));
+    __ASSERT_NO_MSG(atomic_get(&reports) == 2);
+    printk("PASS hid-handoff-period axis=%u first=%lld second=%lld time=%lld\n",
+           axis, first, second, k_uptime_get());
+}
+
+static void run_hid_handoff_rearm(bool scroll, bool expired) {
+    axis = scroll ? INPUT_REL_WHEEL : INPUT_REL_X;
+    atomic_set(&completed, 0);
+    atomic_set(&reports, 0);
+    atomic_set(&hold_hid_set, 1);
+    process(axis, scroll ? 40 : 200);
+    __ASSERT_NO_MSG(k_sem_take(&hid_set_entered, K_SECONDS(1)) == 0);
+    process(axis, scroll ? 16 : 80);
+    int64_t restarted = k_uptime_get();
+    k_sleep(K_MSEC(expired ? 35 : 5));
+    int64_t released = k_uptime_get();
+    k_sem_give(&hid_set_release);
+    k_sleep(K_MSEC(5));
+    if (!expired) {
+        __ASSERT(atomic_get(&reports) == 1,
+                 "HID completion overwrote a future manual trigger");
+        k_sleep(K_MSEC(20));
+    }
+    __ASSERT(atomic_get(&reports) == 2,
+             "HID completion lost a rearmed manual trigger");
+    __ASSERT_NO_MSG(last_report_at >= (expired ? released : restarted + 20));
+    __ASSERT_NO_MSG(last_report_at <= (expired ? released + 2 : restarted + 22));
+    __ASSERT_NO_MSG(last_report.d_x == (scroll ? 0 : 36));
+    __ASSERT_NO_MSG(last_report.d_scroll_y == (scroll ? 7 : 0));
+    int64_t first_new = last_report_at;
+    process(axis, 0);
+    k_sleep(K_MSEC(130));
+    __ASSERT_NO_MSG(atomic_get(&reports) == 2);
+    printk("PASS hid-handoff-rearm axis=%u expired=%d restarted=%lld released=%lld new=%lld time=%lld\n",
+           axis, expired, restarted, released, first_new, k_uptime_get());
+}
+
+static void run_endpoint_error_recovery(bool scroll) {
+    axis = scroll ? INPUT_REL_WHEEL : INPUT_REL_X;
+    atomic_set(&completed, 0);
+    atomic_set(&reports, 0);
+    atomic_set(&hold_send, 1);
+    atomic_set(&endpoint_failures_left, 2);
+    atomic_set(&endpoint_failures, 0);
+    struct inertia_params original, changed;
+    __ASSERT_NO_MSG(inertia_get_params(inertia, &original) == 0);
+    changed = original;
+    changed.move_decay_factor_int = changed.scroll_decay_factor_int = 50;
+    __ASSERT_NO_MSG(inertia_set_params(inertia, &changed) == 0);
+    process(axis, 128);
+    __ASSERT_NO_MSG(k_sem_take(&send_entered, K_SECONDS(1)) == 0);
+    __ASSERT_NO_MSG(atomic_get(&reports) == 1);
+    __ASSERT_NO_MSG(last_report.d_x == (scroll ? 0 : 32));
+    __ASSERT_NO_MSG(last_report.d_scroll_y == (scroll ? 32 : 0));
+    k_sleep(K_MSEC(120)); /* Error arrives after a complete report period. */
+    int64_t released = k_uptime_get();
+    k_sem_give(&send_release);
+    k_sleep(K_MSEC(50));
+    __ASSERT(atomic_get(&reports) == 1 && atomic_get(&endpoint_failures) == 1,
+             "failed endpoint compressed recovery interval");
+    __ASSERT_NO_MSG(!snapshot(scroll).report_pending);
+    const struct zmk_hid_mouse_report_body *body = &zmk_hid_get_mouse_report()->body;
+    __ASSERT_NO_MSG(body->d_x == 0 && body->d_y == 0 && body->d_scroll_x == 0 && body->d_scroll_y == 0);
+    k_sleep(K_MSEC(65));
+    __ASSERT_NO_MSG(atomic_get(&reports) == 2 && atomic_get(&endpoint_failures) == 2);
+    __ASSERT_NO_MSG(last_report_at >= released + 100 && last_report_at <= released + 102);
+    __ASSERT_NO_MSG(last_report.d_x == (scroll ? 0 : 16));
+    __ASSERT_NO_MSG(last_report.d_scroll_y == (scroll ? 16 : 0));
+    int64_t second = last_report_at;
+    k_sleep(K_MSEC(100));
+    __ASSERT_NO_MSG(atomic_get(&reports) == 3 && atomic_get(&endpoint_failures) == 2);
+    __ASSERT_NO_MSG(last_report_at >= second + 100 && last_report_at <= second + 102);
+    __ASSERT_NO_MSG(last_report.d_x == (scroll ? 0 : 8));
+    __ASSERT_NO_MSG(last_report.d_scroll_y == (scroll ? 8 : 0));
+    __ASSERT_NO_MSG(last_report.d_y == 0 && last_report.d_scroll_x == 0);
+    int64_t recovered = last_report_at;
+    process(axis, 0);
+    k_sleep(K_MSEC(130));
+    __ASSERT_NO_MSG(atomic_get(&reports) == 3 && !snapshot(scroll).report_pending);
+    __ASSERT_NO_MSG(!snapshot(scroll).active && atomic_get(&endpoint_failures_left) == 0);
+    __ASSERT_NO_MSG(body->d_x == 0 && body->d_y == 0 && body->d_scroll_x == 0 && body->d_scroll_y == 0);
+    __ASSERT_NO_MSG(inertia_set_params(inertia, &original) == 0);
+    printk("PASS endpoint-error-recovery axis=%u failures=2 released=%lld second=%lld recovered=%lld time=%lld\n",
+           axis, released, second, recovered, k_uptime_get());
+}
+
 static void run_tests(void *a, void *b, void *c) {
     ARG_UNUSED(a);
     ARG_UNUSED(b);
     ARG_UNUSED(c);
     __ASSERT_NO_MSG(device_is_ready(inertia));
+    run_endpoint_error_recovery(false);
+    run_endpoint_error_recovery(true);
     run_timeout_conversion();
+    run_hid_handoff_period(false);
+    run_hid_handoff_period(true);
+    run_hid_handoff_rearm(false, false);
+    run_hid_handoff_rearm(false, true);
+    run_hid_handoff_rearm(true, false);
+    run_hid_handoff_rearm(true, true);
+    run_delayed_consumer_period(false);
+    run_delayed_consumer_period(true);
     run_rearm_expired_before_exit(false);
     run_rearm_expired_before_exit(true);
     run_running_rearm(false, false);
@@ -382,7 +559,7 @@ static void run_tests(void *a, void *b, void *c) {
     run_queue_full();
     run_settings_cancel(false,false);run_settings_cancel(true,false);
     run_settings_cancel(false,true);run_settings_cancel(true,true);
-    printk("inertia endpoint boundary: PASS groups=19\n");
+    printk("inertia endpoint boundary: PASS groups=29\n");
     exit(0);
 }
 

@@ -31,7 +31,9 @@ def main():
         try:check_report(report,production)
         except RuntimeError:pass
         else:raise RuntimeError('adapter coverage accepted absent/unmeasured functions')
-    variants=[('sanitized',['-O1','-g','-fsanitize=address,undefined','-fno-sanitize-recover=all'])]
+    variants=[('sanitized',['-O1','-g','-fsanitize=address,undefined,pointer-compare','-fno-sanitize-recover=all'])]
+    sanitizer_env=os.environ.copy()
+    sanitizer_env['ASAN_OPTIONS']=sanitizer_env.get('ASAN_OPTIONS','detect_leaks=0')+':detect_invalid_pointer_pairs=2'
     if mode=='full':variants += [('optimized',['-O2']),('coverage',['-O0','--coverage'])]
     with tempfile.TemporaryDirectory(prefix='inertia-settings-') as folder:
         work=Path(folder)
@@ -40,7 +42,7 @@ def main():
             subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror',*flags,
                 '-I'+str(root/'tests/support'),'-I'+str(root/'include'),
                 str(root/'tests/runtime/custom_settings_harness.c'),'-o',str(binary)],check=True)
-            subprocess.run([str(binary)],check=True)
+            subprocess.run([str(binary)],check=True,env=sanitizer_env if label=='sanitized' else None)
         if mode=='full':
             subprocess.run(['gcov','-b','-c',str(work/'coverage-custom_settings_harness.gcno')],cwd=work,check=True,capture_output=True)
             report=(work/(source.name+'.gcov')).read_text(encoding='utf-8')

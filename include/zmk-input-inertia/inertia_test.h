@@ -22,7 +22,7 @@ struct inertia_test_snapshot {
     bool active;
     bool inertial;
     bool frame_open;
-    bool report_pending;
+    bool report_pending; /* Includes an accepted HID transaction until it completes. */
 };
 
 k_ticks_t inertia_test_timeout_ticks(uint16_t ms, uint32_t hz);

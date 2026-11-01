@@ -11,7 +11,7 @@
     },
     {
       "fixture": "tests/runtime/driver_harness.c",
-      "asserts": "Per-stream scheduling, already-running handler rearm deadlines for move/scroll before and after glide starts, first-axis manual preemption, bounded pending frames, generation validation, full-queue recovery, unlocked endpoint calls and lifecycle cancellation"
+      "asserts": "Per-stream scheduling, rearm deadlines, first-axis manual preemption, bounded queued/in-flight slots, completion-based cadence, future/expired trigger recovery, generation validation, full-queue recovery, 576 signed/Ctrl/history composite-axis permutations, and eight complete normal/faulted signed move/scroll traces with exact values, ticks, stop and separate attempted/delivered totals"
     },
     {
       "fixture": "tests/runtime/test_hook_harness.c",
@@ -33,7 +33,7 @@
     "command": "bash tests/endpoint-boundary/run.sh",
     "setup": "Run in an already resolved owner west workspace; no fetch or revision changes",
     "fixture": "tests/endpoint-boundary/module/src/boundary.c",
-    "asserts": "Nineteen groups: all seventeen retained endpoint/settings/timeout/rearm groups plus two move/scroll cases whose new deadline expires before the old callback exits; queued work must recover within0-2 simulated ms of release with exact axes/magnitude and no post-cancel output. All previous ordered values, time and independence assertions retained",
+    "asserts": "Twenty-nine groups: all twenty-seven retained endpoint/settings/timeout/rearm/cadence groups plus two move/scroll endpoint error/recovery cases. Exact first/next outputs,100-102ms controlled report gaps through blocked and repeated failed submissions, actual HID/slot clearing and post-cancel silence; all original values/time/independence assertions retained",
     "repeats": 3,
     "backend": "native_sim//zmk_test_mock, production driver/ZMK HID/kernel APIs, wrapped transport only"
   },
@@ -64,7 +64,7 @@
     "command": "bash tests/review-shared-hid/run.sh RESOLVED_WORKSPACE FRESH_OUTPUT",
     "fixture": "tests/review-shared-hid/shared_hid.c",
     "repeats": 3,
-    "asserts": "Pending report intact against the actual input listener; queued manual X before old token and Y/SYNC after it cancels another stream on first axis, preserves exact first frame, discards stale output and clears final fields",
+    "asserts": "All original three ordered reports and manual preemption retained, plus four reports through the actual listener: two composite manual frames with trailing/leading zero wheels, exact first inertia(135,54), zero-only stop and final clearing. Seven reports total, no later output",
     "negative_control": "Append counterexample on the pre-fix source; named assertion must fail 3/3; original fixture externally preserved; bypass-manual on current source removes only the manual listener processor and requires the named stale-frame assertion 3/3",
     "automatic_entry": "tests/integration/run.sh (same standalone owner command; three repeats)"
   },

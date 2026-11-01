@@ -164,6 +164,12 @@ Invalid intervals, threshold ranges, and threshold ordering are also rejected at
 
 X and Y events are accumulated until the event marked `sync` closes the input frame. An axis omitted by the device is treated as zero for that frame. Each ZMK input listener has independent frame and velocity history, so two devices cannot combine their axes accidentally. An event whose listener index is outside the listeners the build defines has no history of its own: it passes through unchanged instead of joining the first listener's.
 
+Zero auxiliary axes keep the same stream's current motion kind. A zero wheel
+beside real pointer deltas, or zero pointer axes beside scrolling, cannot erase
+the frame or its preceding manual velocity average, regardless of event order.
+A zero-only frame still stops inertia. Nonzero pointer/scroll input switches
+the shared node's motion kind as before.
+
 Manual pointer or scroll input cancels conflicting inertia across listeners
 of the same Inertia node on the first relative event, before frame sync. The
 manual event is passed through unchanged. Separate Inertia nodes remain
@@ -184,6 +190,12 @@ cancellation generation immediately before accepting output. Stale queued
 frames are discarded. A late consumer does not accumulate catch-up frames;
 when the input queue is full, that interval is dropped and later decay can
 retry. No additional input processor or keymap listener is required.
+
+The pending slot stays owned until the HID transaction completes. Only then
+does the next configured report interval begin; a delayed consumer or a pause
+before sending cannot produce closely spaced catch-up reports. Cancellation
+can still proceed during a blocked send. When its old slot is released, a new
+manual trigger keeps any remaining wait or resumes immediately if overdue.
 
 HID set/send/clear runs on the same input thread as ordinary ZMK pointing
 listeners, so those transactions cannot overwrite one another. The input-state
@@ -230,6 +242,11 @@ Node-wide changes affect every listener that uses that instance. Associate
 `amgskobo__inertia` and the node identifier in DYA physical-layout links to expose the
 settings beside a pad. Physical Studio RPC/UI and device power-loss behavior
 require separate board acceptance.
+
+A setting-change event applies only to the node that owns that setting.
+Other nodes retain direct runtime API values and ongoing motion. Initialization
+still restores the complete registry for all nodes. Node names used as setting
+identifiers must be unique across Inertia instances.
 
 The readable subsystem ID `amgskobo__inertia` is also the persistence namespace.
 Values saved under the earlier local `amgskobo__in` ID are not migrated or

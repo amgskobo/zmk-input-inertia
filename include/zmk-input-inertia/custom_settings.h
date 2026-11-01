@@ -3,7 +3,7 @@
 #include <zephyr/devicetree.h>
 #include <zephyr/settings/settings.h>
 #include <zephyr/sys/util.h>
-/* Readable group ID; cancel_on_ctrl permits a 13-character node at 64 bytes. */
+/* Readable group ID; cancel_on_ctrl permits a 14-character node at 64 bytes. */
 #define ZMK_INPUT_INERTIA_SUBSYSTEM_TOKEN amgskobo__inertia
 #define ZMK_INPUT_INERTIA_SUBSYSTEM STRINGIFY(ZMK_INPUT_INERTIA_SUBSYSTEM_TOKEN)
 #define INERTIA_SETTING_KEY(n, field) DT_NODE_FULL_NAME(DT_DRV_INST(n)) "." field

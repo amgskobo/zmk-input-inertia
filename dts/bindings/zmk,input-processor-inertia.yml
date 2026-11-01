@@ -29,6 +29,8 @@ properties:
     description: |
       The time interval (ms) for calculating and sending inertia movement reports.
       Must be 1-65535.
+      The next interval starts after the preceding synthesized HID transaction
+      completes. Queue or transport delays can extend it, but do not compress it.
       Matching this to your sensor's polling rate (e.g., 15ms) provides the smoothest transition.
 
   move-threshold-start:
@@ -58,6 +60,8 @@ properties:
     default: 65
     description: |
       The time interval (ms) for scroll inertia updates. Must be 1-65535.
+      The next interval starts after the preceding synthesized HID transaction
+      completes. Queue or transport delays can extend it, but do not compress it.
 
   scroll-threshold-start:
     type: int

@@ -58,7 +58,9 @@ struct zmk_custom_setting { const char *custom_subsystem_id,*key; int type; stru
  static struct zmk_custom_setting n={.custom_subsystem_id=sub,.key=k,.type=t,.value=v,.range=__VA_ARGS__}
 static int zmk_custom_setting_read(const struct zmk_custom_setting *s,struct zmk_custom_setting_value *out) { if(s->error)return -1;*out=s->value;return 0; }
 static struct zmk_custom_setting *registry[21];
-#define ZMK_CUSTOM_SETTING_FOREACH(s) for(size_t s##_i=0;s##_i<21;s##_i++) for(struct zmk_custom_setting *s=registry[s##_i];s;s=NULL)
+#define ZMK_CUSTOM_SETTING_FOREACH(s) \
+ for(struct zmk_custom_setting **s##_it=registry,*s=NULL; \
+     s##_it<registry+21 && (s=*s##_it,true);s##_it++)
 struct zmk_custom_setting_changed { const struct zmk_custom_setting *setting; };
 typedef struct { const struct zmk_custom_setting_changed *changed; } zmk_event_t;
 static const struct zmk_custom_setting_changed *as_zmk_custom_setting_changed(const zmk_event_t *e) { return e->changed; }
@@ -109,20 +111,42 @@ int main(void) {
  assert(applies[0]==1 && applies[1]==1 && live[0].trigger_ms==35 && live[1].move_decay_factor_int==90);
  struct zmk_custom_setting_changed changed={&unrelated};zmk_event_t event={&changed};
  assert(inertia_settings_event(&event)==0 && applies[0]==1);
+ /* A setting event on node zero must preserve node one's direct runtime tune. */
+ struct inertia_params runtime=live[1];runtime.trigger_ms=47;
+ assert(inertia_set_params(&devices[1],&runtime)==0);
+ int other_applies=applies[1];changed.setting=&inertia_cs_trigger_ms_0;
+ assert(inertia_settings_event(&event)==0);
+ assert(live[1].trigger_ms==47 && applies[1]==other_applies && "unrelated settings event reset another node");
  inertia_cs_trigger_ms_0.value.int32_value=40;inertia_cs_cancel_scroll_inertia_on_ctrl_1.value.bool_value=true;
  changed.setting=&inertia_cs_trigger_ms_0;
- assert(inertia_settings_event(&event)==0 && live[0].trigger_ms==40 && live[1].cancel_scroll_inertia_on_ctrl && "Inertia settings apply");
+ assert(inertia_settings_event(&event)==0 && live[0].trigger_ms==40 && "Inertia settings apply");
+ assert(live[1].trigger_ms==47 && !live[1].cancel_scroll_inertia_on_ctrl);
+ changed.setting=&inertia_cs_cancel_scroll_inertia_on_ctrl_1;
+ assert(inertia_settings_event(&event)==0 && live[1].cancel_scroll_inertia_on_ctrl);
+ for(size_t i=0;i<count;i++) {
+  size_t affected=i/10,other=1-affected;
+  runtime=live[other];runtime.trigger_ms=(int32_t)(47+other);
+  assert(inertia_set_params(&devices[other],&runtime)==0);
+  int before_other=applies[other],before_affected=applies[affected];
+  changed.setting=registry[i];
+  assert(inertia_settings_event(&event)==0);
+  assert(applies[affected]==before_affected+1 && applies[other]==before_other);
+  assert(live[other].trigger_ms==runtime.trigger_ms);
+ }
+ struct zmk_custom_setting unknown={.custom_subsystem_id=ZMK_INPUT_INERTIA_SUBSYSTEM,.key="unknown"};
+ changed.setting=&unknown;int before_unknown=applies[0]+applies[1];
+ assert(inertia_settings_event(&event)==0 && applies[0]+applies[1]==before_unknown);
  for(size_t i=0;i<20;i++) {
   int before=applies[i/10];registry[i]->error=-1;
-  inertia_apply_settings();assert(applies[i/10]==before);registry[i]->error=0;
+  inertia_apply_settings(NULL);assert(applies[i/10]==before);registry[i]->error=0;
   int type=registry[i]->value.type;registry[i]->value.type=99;
-  inertia_apply_settings();assert(applies[i/10]==before);registry[i]->value.type=type;
+  inertia_apply_settings(NULL);assert(applies[i/10]==before);registry[i]->value.type=type;
  }
- reject=1;inertia_apply_settings();assert(warnings==2);reject=0;
+ reject=1;inertia_apply_settings(NULL);assert(warnings==2);reject=0;
  const char *key=registry[1]->key;registry[1]->key=registry[0]->key;
  assert(inertia_check_keys()==0 && errors>=1);registry[1]->key=key;
  const char *sub=registry[0]->custom_subsystem_id;registry[0]->custom_subsystem_id="other";
  assert(inertia_check_keys()==0);registry[0]->custom_subsystem_id=sub;
  assert(settings_lock.depth==0);
- puts("Inertia custom settings: 20 keys/defaults/ranges, init, two nodes, read/type errors, rejected snapshots and duplicates PASS");return 0;
+ puts("Inertia custom settings: 20 keys/defaults/ranges, init, per-node event isolation, read/type errors, rejected snapshots and duplicates PASS");return 0;
 }

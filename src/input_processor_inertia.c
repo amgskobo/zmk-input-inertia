@@ -71,7 +71,7 @@ struct inertia_motion_state {
 struct inertia_pending_report {
     uint32_t generation;
     int16_t output[INERTIA_AXIS_COUNT];
-    bool queued;
+    bool queued; /* Slot owned by a queued token or its in-flight HID transaction. */
 };
 
 struct inertia_data;
@@ -288,9 +288,9 @@ static bool decay_motion_locked(struct inertia_motion_state *motion, uint16_t fa
     return true;
 }
 
-/* Queue a single token for the complete X/Y or wheel frame. The payload stays
- * in its stream until consumed, so congestion cannot split axes or grow a
- * private backlog. Cancellation changes generation, never reuses a queued slot. */
+/* Queue a single token for the complete X/Y or wheel frame. Its slot stays
+ * owned until rejection or completion of the HID transaction, so congestion
+ * cannot split axes or grow a backlog. Cancellation never reuses an owned slot. */
 static void decay_work(struct inertia_stream *stream, bool scroll) {
     struct inertia_data *data = stream->owner;
     const struct inertia_config *config = &data->config;
@@ -322,8 +322,7 @@ static void decay_work(struct inertia_stream *stream, bool scroll) {
         return;
     }
     if (pending->queued) {
-        (void)k_work_reschedule_for_queue(zmk_workqueue_lowprio_work_q(), work,
-                                          inertia_timeout_ms(interval));
+        /* The consumer resumes scheduling when it releases this slot. */
         k_mutex_unlock(&data->lock);
         return;
     }
@@ -339,9 +338,9 @@ static void decay_work(struct inertia_stream *stream, bool scroll) {
                            true, K_NO_WAIT);
     if (err != 0) {
         pending->queued = false;
+        (void)k_work_reschedule_for_queue(zmk_workqueue_lowprio_work_q(), work,
+                                          inertia_timeout_ms(interval));
     }
-    (void)k_work_reschedule_for_queue(zmk_workqueue_lowprio_work_q(), work,
-                                      inertia_timeout_ms(interval));
     k_mutex_unlock(&data->lock);
     if (err != 0) {
         LOG_WRN_ONCE("inertia input queue full: rc=%d; repeated failures suppressed", err);
@@ -366,6 +365,28 @@ static void scroll_decay_callback(struct k_work *work) {
     inertia_test_after_decay(stream->owner->dev,
                              (size_t)(stream - stream->owner->streams), true);
 #endif
+}
+
+static void finish_report_locked(struct inertia_stream *stream, bool scroll,
+                                  uint32_t generation, bool committed) {
+    struct inertia_data *data = stream->owner;
+    struct inertia_motion_state *motion = scroll ? &stream->scroll : &stream->move;
+    struct inertia_pending_report *pending = scroll ? &stream->scroll_report : &stream->move_report;
+    struct k_work_delayable *work = scroll ? &stream->scroll_work : &stream->move_work;
+
+    pending->queued = false;
+    if (!motion->active) {
+        return;
+    }
+    if (committed && generation == (uint32_t)atomic_get(&motion->generation)) {
+        uint16_t interval = scroll ? data->config.scroll_interval_ms : data->config.move_interval_ms;
+        (void)k_work_reschedule_for_queue(zmk_workqueue_lowprio_work_q(), work,
+                                          inertia_timeout_ms(interval));
+    } else if (k_work_delayable_remaining_get(work) == 0) {
+        /* A newer manual trigger may have expired while this slot was owned.
+         * Resume it now; a still-future trigger must retain its full wait. */
+        (void)k_work_reschedule_for_queue(zmk_workqueue_lowprio_work_q(), work, K_NO_WAIT);
+    }
 }
 
 /* Only this node's internal tokens reach this callback. It runs on Zephyr's
@@ -393,14 +414,16 @@ static void inertia_input_callback(struct input_event *event, void *user_data) {
         k_mutex_unlock(&data->lock);
         return;
     }
-    pending->queued = false;
+    uint32_t generation = pending->generation;
     if (pending->generation != (uint32_t)atomic_get(&motion->generation) || !motion->active ||
         !motion->inertial) {
+        finish_report_locked(stream, scroll, generation, false);
         k_mutex_unlock(&data->lock);
         return;
     }
     if (scroll && config->cancel_scroll_inertia_on_ctrl && ctrl_mod_is_active()) {
         cancel_scroll_locked(stream);
+        finish_report_locked(stream, scroll, generation, false);
         k_mutex_unlock(&data->lock);
         return;
     }
@@ -422,6 +445,9 @@ static void inertia_input_callback(struct input_event *event, void *user_data) {
     } else {
         zmk_hid_mouse_movement_set(0, 0);
     }
+    k_mutex_lock(&data->lock, K_FOREVER);
+    finish_report_locked(stream, scroll, generation, true);
+    k_mutex_unlock(&data->lock);
     if (err != 0) {
         LOG_WRN_ONCE("inertia report failed: rc=%d; repeated failures suppressed", err);
     }
@@ -446,6 +472,24 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
     }
 
     k_mutex_lock(&data->lock, K_FOREVER);
+
+    /* Zero axes in a composite report do not select a new motion kind. Keep
+     * the same stream's buffered/manual history until a nonzero axis selects
+     * otherwise. A zero-only frame still cancels on its first axis and stops
+     * at sync; the original event's payload and sync remain unchanged. */
+    if (event->value == 0) {
+        if ((scroll_x || scroll_y) && motion_has_state(&stream->move)) {
+            move_x = true;
+            move_y = false;
+            scroll_x = false;
+            scroll_y = false;
+        } else if ((move_x || move_y) && motion_has_state(&stream->scroll)) {
+            scroll_x = true;
+            scroll_y = false;
+            move_x = false;
+            move_y = false;
+        }
+    }
 
     if (move_x || move_y) {
         begin_move_frame_locked(data, stream);

@@ -18,8 +18,14 @@ listener must cancel the old glide on X, discard its stale token and emit exactl
 `(3, -2)` as the first manual frame. No direct cancellation call substitutes for
 that input path. The fixture computes the real listener index from devicetree,
 including standard ZMK mouse-behavior listeners. Three exact reports are accepted
-across both phases, with no later report and final cleared fields. One binary
-runs three times.
+across both phases, with no later report and final cleared fields.
+
+A third phase sends two `(200, 80)` manual frames through that same listener,
+with a zero wheel first at the end and then at the start. Both manual reports
+must remain exact, the retained manual average must produce `(135, 54)` as the
+first glide report, and a zero-only manual frame must stop it. These four added
+reports make seven ordered reports in total; the first three original reports
+and all their assertions remain. One binary runs three times.
 
 For the pre-fix negative control, append `counterexample`. Every run must fail
 at `pending inertia report overwritten by another HID producer`; timeouts and

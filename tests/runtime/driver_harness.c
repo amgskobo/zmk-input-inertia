@@ -80,6 +80,7 @@ static bool expect_scroll;
 /* Runs in the gap between deciding to emit and emitting. */
 static void (*before_emit)(struct inertia_stream *stream);
 static void (*before_decay)(struct inertia_stream *stream);
+static void (*during_hid_set)(void);
 static struct inertia_data data;
 
 static atomic_val_t atomic_get(const atomic_t *value) { return *value; }
@@ -122,10 +123,16 @@ static struct keyboard_report *zmk_hid_get_keyboard_report(void) { return &keybo
 static void zmk_hid_mouse_movement_set(int16_t x, int16_t y) {
     hid_move[0] = x;
     hid_move[1] = y;
+    if ((x != 0 || y != 0) && during_hid_set != NULL) {
+        void (*hook)(void) = during_hid_set;during_hid_set = NULL;hook();
+    }
 }
 static void zmk_hid_mouse_scroll_set(int16_t x, int16_t y) {
     hid_scroll[0] = x;
     hid_scroll[1] = y;
+    if ((x != 0 || y != 0) && during_hid_set != NULL) {
+        void (*hook)(void) = during_hid_set;during_hid_set = NULL;hook();
+    }
 }
 static int zmk_endpoint_send_mouse_report(void) {
     assert(data.lock.depth == 0); /* transport never owns input state */
@@ -185,6 +192,7 @@ static void send_to(struct zmk_input_processor_state *state, uint16_t type, uint
     struct input_event event = {.sync = sync, .type = type, .code = code, .value = value};
     assert(inertia_handle_event(&processor, &event, 0, 0, state) == ZMK_INPUT_PROC_CONTINUE);
     assert(event.code == code && event.value == value); /* never altered */
+    assert(event.type == type && event.sync == sync);
 }
 
 static void move(struct zmk_input_processor_state *state, int32_t x, int32_t y) {
@@ -635,6 +643,314 @@ static void test_runtime_params(void) {
     puts("inertia runtime params: bounds, coupled thresholds, all100 percentages, no-op, cancellation and queued tokens PASS");
 }
 
+static void test_auxiliary_zero_frames(void) {
+    const uint16_t wheels[] = {INPUT_REL_WHEEL, INPUT_REL_HWHEEL};
+    const uint16_t pointers[] = {INPUT_REL_X, INPUT_REL_Y};
+    for (size_t ctrl = 0; ctrl < 2; ctrl++) {
+        for (size_t i = 0; i < 2; i++) {
+            for (size_t closes = 0; closes < 2; closes++) {
+                assert(inertia_init(&processor) == 0);
+                data.config.cancel_scroll_inertia_on_ctrl = ctrl != 0;
+                keyboard.body.modifiers = ctrl ? MOD_LCTL : 0;
+                send_to(NULL, INPUT_EV_REL, INPUT_REL_X, 200, false);
+                if (closes) {
+                    send_to(NULL, INPUT_EV_REL, INPUT_REL_Y, 80, false);
+                    send_to(NULL, INPUT_EV_REL, wheels[i], 0, true);
+                } else {
+                    send_to(NULL, INPUT_EV_REL, wheels[i], 0, false);
+                    send_to(NULL, INPUT_EV_REL, INPUT_REL_Y, 80, true);
+                }
+                assert(stream(0)->move.active && "zero wheel erased manual pointer frame");
+                assert(stream(0)->move.velocity[0] == 200 && stream(0)->move.velocity[1] == 80);
+                assert(!stream(0)->scroll.active && !stream(0)->move.frame.open);
+            }
+        }
+    }
+    keyboard.body.modifiers = 0;
+    for (size_t i = 0; i < 2; i++) {
+        for (size_t closes = 0; closes < 2; closes++) {
+            assert(inertia_init(&processor) == 0);
+            send_to(NULL, INPUT_EV_REL, INPUT_REL_HWHEEL, 12, false);
+            if (closes) {
+                send_to(NULL, INPUT_EV_REL, INPUT_REL_WHEEL, 20, false);
+                send_to(NULL, INPUT_EV_REL, pointers[i], 0, true);
+            } else {
+                send_to(NULL, INPUT_EV_REL, pointers[i], 0, false);
+                send_to(NULL, INPUT_EV_REL, INPUT_REL_WHEEL, 20, true);
+            }
+            assert(stream(0)->scroll.active && "zero pointer erased manual scroll frame");
+            assert(stream(0)->scroll.velocity[0] == 12 && stream(0)->scroll.velocity[1] == 20);
+            assert(!stream(0)->move.active && !stream(0)->scroll.frame.open);
+        }
+    }
+    /* Zero-only new frames and real nonzero mode changes still cancel. */
+    move(NULL, 0, 0);
+    assert(!stream(0)->scroll.active);
+    move(NULL, 200, 0);
+    wheel(NULL, 0, 0);
+    assert(!stream(0)->move.active);
+    send_to(NULL, INPUT_EV_REL, INPUT_REL_X, 200, false);
+    send_to(NULL, INPUT_EV_REL, INPUT_REL_WHEEL, 20, true);
+    assert(!stream(0)->move.active && stream(0)->scroll.active);
+    send_to(NULL, INPUT_EV_REL, INPUT_REL_X, 200, true);
+    assert(stream(0)->move.active && !stream(0)->scroll.active);
+    assert(inertia_init(&processor) == 0);
+    puts("inertia mixed frames: auxiliary zero axes preserve motion and sync PASS");
+}
+
+static void test_delayed_consumer_period(void) {
+    for (size_t scroll = 0; scroll < 2; scroll++) {
+        for (int sign = -1; sign <= 1; sign += 2) {
+            assert(inertia_init(&processor) == 0);
+            expect_scroll = scroll != 0;
+            struct k_work_delayable *work = scroll ? &stream(0)->scroll_work : &stream(0)->move_work;
+            const uint16_t period = scroll ? data.config.scroll_interval_ms : data.config.move_interval_ms;
+            const int before = sent_reports;
+            if (scroll) { wheel(NULL, 0, sign * 40); }
+            else { move(NULL, sign * 200, 0); }
+            run_work(work);
+            assert(input_count == 1 && sent_reports == before);
+            now_ms += period - 1; /* Consumer resumes just before the former periodic deadline. */
+            drain_reports();
+            assert(sent_reports == before + 1);
+            const int64_t first = sent_at_ms;
+            run_work(work);
+            drain_reports();
+            assert(sent_reports == before + 2);
+            assert(sent_at_ms - first >= period && "delayed consumer compressed inertia interval");
+            assert(scroll ? sent_scroll[1] == sign * 12 : sent_move[0] == sign * 81);
+            if (scroll) { wheel(NULL, 0, 0); }
+            else { move(NULL, 0, 0); }
+        }
+    }
+    expect_scroll = false;
+    assert(inertia_init(&processor) == 0);
+    puts("inertia delayed consumer: move/scroll report periods and exact decay PASS");
+}
+
+static void pause_hid_past_period(void) {
+    uint16_t period=expect_scroll?data.config.scroll_interval_ms:data.config.move_interval_ms;
+    now_ms += period + 5;
+    run_work(expect_scroll?&stream(0)->scroll_work:&stream(0)->move_work);
+}
+
+static void test_hid_handoff_period(void) {
+    for (size_t scroll=0;scroll<2;scroll++) {
+        assert(inertia_init(&processor)==0);
+        expect_scroll=scroll!=0;
+        uint16_t period=scroll?data.config.scroll_interval_ms:data.config.move_interval_ms;
+        const int before=sent_reports;
+        during_hid_set=pause_hid_past_period;
+        if(scroll) {wheel(NULL,0,40);run_scroll(0);}
+        else {move(NULL,200,0);run_move(0);}
+        assert(sent_reports==before+1 && "HID handoff compressed inertia interval");
+        int64_t first=sent_at_ms;
+        if(scroll) {run_scroll(0);} else {run_move(0);}
+        assert(sent_reports==before+2 && sent_at_ms-first>=period);
+        if(scroll) {wheel(NULL,0,0);} else {move(NULL,0,0);}
+    }
+    expect_scroll=false;
+    assert(inertia_init(&processor)==0);
+}
+
+static bool expire_rearm;
+static void restart_owned_slot(void) {
+    if(expect_scroll) {wheel(NULL,0,16);} else {move(NULL,80,0);}
+    rearmed_at_ms=now_ms;
+    if(expire_rearm) {
+        now_ms+=data.config.trigger_ms+5;
+        run_work(expect_scroll?&stream(0)->scroll_work:&stream(0)->move_work);
+    }
+}
+
+static void restart_before_emit(struct inertia_stream *s) {
+    assert(s==stream(0));restart_owned_slot();
+}
+
+static void test_owned_slot_rearm(void) {
+    for(size_t scroll=0;scroll<2;scroll++) {
+        for(size_t committed=0;committed<2;committed++) {
+            for(size_t expired=0;expired<2;expired++) {
+                assert(inertia_init(&processor)==0);
+                expect_scroll=scroll!=0;expire_rearm=expired!=0;
+                const int before=sent_reports;
+                if(committed) {during_hid_set=restart_owned_slot;}
+                else {before_emit=restart_before_emit;}
+                if(scroll) {wheel(NULL,0,40);run_scroll(0);}
+                else {move(NULL,200,0);run_move(0);}
+                assert(sent_reports==before+(int)committed);
+                struct k_work_delayable *work=scroll?&stream(0)->scroll_work:&stream(0)->move_work;
+                const int64_t due=expired?now_ms:rearmed_at_ms+data.config.trigger_ms;
+                assert(work->scheduled && work->due_ms==due && "owned slot lost or overwrote new trigger");
+                assert(!(scroll?stream(0)->scroll_report.queued:stream(0)->move_report.queued));
+                if(scroll) {run_scroll(0);} else {run_move(0);}
+                assert(sent_reports==before+(int)committed+1 && sent_at_ms==due);
+                assert(scroll?sent_scroll[1]==6:sent_move[0]==36);
+                if(scroll) {wheel(NULL,0,0);} else {move(NULL,0,0);}
+            }
+        }
+    }
+    expect_scroll=false;
+    assert(inertia_init(&processor)==0);
+    puts("inertia owned slots: queued/in-flight cancellation preserves future and expired triggers PASS");
+}
+
+static void test_composite_permutations(void) {
+    const uint16_t codes[2][4]={{INPUT_REL_X,INPUT_REL_Y,INPUT_REL_HWHEEL,INPUT_REL_WHEEL},
+                                {INPUT_REL_HWHEEL,INPUT_REL_WHEEL,INPUT_REL_X,INPUT_REL_Y}};
+    unsigned cases=0;
+    for(size_t kind=0;kind<2;kind++) {
+        for(size_t ctrl=0;ctrl<2;ctrl++) {
+          for(size_t history=0;history<3;history++) {
+            for(int sign=-1;sign<=1;sign+=2) {
+                for(size_t a=0;a<4;a++) for(size_t b=0;b<4;b++) {
+                    if(b==a)continue;
+                    for(size_t c=0;c<4;c++) {
+                        if(c==a||c==b)continue;
+                        size_t order[4]={a,b,c,6-a-b-c};
+                        assert(inertia_init(&processor)==0);
+                        data.config.cancel_scroll_inertia_on_ctrl=true;
+                        const int32_t values[4]={sign*(kind?12:200),sign*(kind?20:80),0,0};
+                        keyboard.body.modifiers=0;expect_scroll=kind!=0;
+                        if(history) {
+                            if(kind) {wheel(NULL,values[0],values[1]);if(history==2)run_scroll(0);}
+                            else {move(NULL,values[0],values[1]);if(history==2)run_move(0);}
+                        }
+                        keyboard.body.modifiers=ctrl?MOD_RCTL:0;
+                        for(size_t i=0;i<4;i++)send_to(NULL,INPUT_EV_REL,codes[kind][order[i]],values[order[i]],i==3);
+                        struct inertia_motion_state *primary=kind?&stream(0)->scroll:&stream(0)->move;
+                        struct inertia_motion_state *other=kind?&stream(0)->move:&stream(0)->scroll;
+                        assert(!primary->frame.open && !other->frame.open && !other->active);
+                        if(kind&&ctrl) {assert(!primary->active);}
+                        else {
+                            assert(primary->active && primary->velocity[0]==values[0] && primary->velocity[1]==values[1]);
+                            int32_t expected_x=history==1?values[0]*3/4:values[0]/2;
+                            int32_t expected_y=history==1?values[1]*3/4:values[1]/2;
+                            assert(primary->ema[0]==expected_x && primary->ema[1]==expected_y && "leading auxiliary zero erased manual history");
+                        }
+                        cases++;
+                    }
+                }
+            }
+          }
+        }
+    }
+    assert(cases==576);
+    keyboard.body.modifiers=0;
+    assert(inertia_init(&processor)==0);
+    send_to(NULL,INPUT_EV_REL,INPUT_REL_X,200,false);
+    send_to(&second,INPUT_EV_REL,INPUT_REL_WHEEL,0,false);
+    assert(!stream(0)->move.frame.open && !stream(0)->move.active);
+    send_to(NULL,INPUT_EV_REL,INPUT_REL_Y,80,true);
+    assert(stream(0)->move.velocity[0]==0 && stream(0)->move.velocity[1]==80);
+    assert(inertia_init(&processor)==0);
+    expect_scroll=false;
+    puts("inertia composite permutations: all24 axis orders x2 kinds x2 signs x2 Ctrl x3 histories PASS cases=576");
+}
+
+static void test_failure_recovery_traces(void) {
+    /* Fixed 50% decay, with ties away from zero and carried Q8 error. These
+     * complete ordered traces include the last nonzero output and stop tick. */
+    static const int16_t trace[][2] = {
+        {32, -16}, {16, -8}, {8, -4}, {4, -2}, {2, -1}, {1, -1}, {1, 0},
+    };
+    unsigned cases = 0;
+    for (size_t scroll = 0; scroll < 2; scroll++) {
+        for (int sign = -1; sign <= 1; sign += 2) {
+            for (size_t faults = 0; faults < 2; faults++) {
+                assert(inertia_init(&processor) == 0);
+                expect_scroll = scroll != 0;
+                struct inertia_params params;
+                assert(inertia_get_params(&processor, &params) == 0);
+                params.move_decay_factor_int = params.scroll_decay_factor_int = 50;
+                params.move_threshold_start = params.scroll_threshold_start = 1;
+                params.move_threshold_stop = params.scroll_threshold_stop = 0;
+                assert(inertia_set_params(&processor, &params) == 0);
+                const int64_t period = scroll ? params.scroll_report_interval_ms
+                                              : params.move_report_interval_ms;
+                struct inertia_stream *s = stream(0);
+                struct inertia_motion_state *motion = scroll ? &s->scroll : &s->move;
+                struct inertia_pending_report *pending = scroll ? &s->scroll_report : &s->move_report;
+                struct k_work_delayable *work = scroll ? &s->scroll_work : &s->move_work;
+                if (scroll) { wheel(NULL, sign * 128, -sign * 64); }
+                else { move(NULL, sign * 128, -sign * 64); }
+                int64_t due = now_ms + params.trigger_ms;
+                const int before = sent_reports;
+                int attempts = 0, total_x = 0, total_y = 0, delivered_x = 0, delivered_y = 0;
+                for (size_t i = 0; i < sizeof(trace) / sizeof(trace[0]); i++) {
+                    assert(work->scheduled && work->due_ms == due);
+                    now_ms = due - 1;
+                    work->work.handler(&work->work);
+                    assert(input_count == 0 && sent_reports == before + attempts);
+                    input_result = faults && i < 2 ? -EAGAIN : 0;
+                    run_work(work);
+                    assert(now_ms == due);
+                    assert(motion->velocity[0] == sign * trace[i][0]);
+                    assert(motion->velocity[1] == sign * trace[i][1]);
+                    total_x += motion->velocity[0]; total_y += motion->velocity[1];
+                    if (input_result != 0) {
+                        assert(input_count == 0 && !pending->queued);
+                        printf("TRACE recovery kind=%s sign=%d faults=%zu step=%zu tick=%lld queued=0 x=%d y=%d input_rc=%d\n",
+                               scroll ? "scroll" : "move", sign, faults, i, (long long)now_ms,
+                               motion->velocity[0], motion->velocity[1], input_result);
+                        due += period;
+                        continue;
+                    }
+                    assert(input_count == 1 && pending->queued && !work->scheduled);
+                    if (faults && i == 2) {
+                        now_ms += 2 * period + 3; /* late token, then two failed sends */
+                        work->work.handler(&work->work);
+                        assert(input_count == 1 && motion->velocity[0] == sign * trace[i][0]);
+                        struct inertia_params invalid = params;
+                        invalid.move_threshold_stop = invalid.move_threshold_start;
+                        uint32_t generation = (uint32_t)motion->generation;
+                        assert(inertia_set_params(&processor, &invalid) == -EINVAL);
+                        assert(inertia_set_params(&processor, &params) == 0);
+                        assert((uint32_t)motion->generation == generation && pending->queued);
+                    }
+                    endpoint_result = faults && i < 4 ? -EIO : 0;
+                    drain_reports(); attempts++;
+                    assert(sent_reports == before + attempts && sent_at_ms == now_ms);
+                    const int16_t *sent = scroll ? sent_scroll : sent_move;
+                    const int16_t *other = scroll ? sent_move : sent_scroll;
+                    assert(sent[0] == sign * trace[i][0] && sent[1] == sign * trace[i][1]);
+                    assert(other[0] == 0 && other[1] == 0);
+                    assert(hid_move[0] == 0 && hid_move[1] == 0 && hid_scroll[0] == 0 && hid_scroll[1] == 0);
+                    assert(!pending->queued && work->scheduled);
+                    if (endpoint_result == 0) { delivered_x += sent[0]; delivered_y += sent[1]; }
+                    printf("TRACE recovery kind=%s sign=%d faults=%zu step=%zu tick=%lld queued=1 x=%d y=%d endpoint_rc=%d\n",
+                           scroll ? "scroll" : "move", sign, faults, i, (long long)sent_at_ms,
+                           sent[0], sent[1], endpoint_result);
+                    due = now_ms + period;
+                }
+                input_result = endpoint_result = 0;
+                assert(attempts == (faults ? 5 : 7));
+                assert(total_x == sign * 64 && total_y == -sign * 32);
+                assert(delivered_x == sign * (faults ? 4 : 64));
+                assert(delivered_y == -sign * (faults ? 2 : 32));
+                assert(work->due_ms == due);
+                now_ms = due - 1;
+                work->work.handler(&work->work);
+                assert(motion->active && sent_reports == before + attempts);
+                run_work(work); drain_reports();
+                assert(now_ms == due && !motion_has_state(motion) && !pending->queued);
+                assert(!work->scheduled && sent_reports == before + attempts);
+                now_ms += 1000;
+                run_work(work); drain_reports();
+                assert(sent_reports == before + attempts);
+                printf("TRACE recovery kind=%s sign=%d faults=%zu attempts=%d total=%d,%d delivered=%d,%d stop=%lld\n",
+                       scroll ? "scroll" : "move", sign, faults, attempts, total_x, total_y,
+                       delivered_x, delivered_y, (long long)due);
+                cases++;
+            }
+        }
+    }
+    assert(cases == 8);
+    expect_scroll = false;
+    assert(inertia_init(&processor) == 0);
+    puts("inertia recovery traces: exact axes/ticks/totals, two queue refusals, two endpoint failures, no-op/invalid writes and stop PASS cases=8");
+}
+
 int main(void) {
     assert(inertia_test_timeout_ticks(35, CONFIG_SYS_CLOCK_TICKS_PER_SEC) == 35);
     config = (struct inertia_config){
@@ -651,6 +967,12 @@ int main(void) {
     test_pending_reports();
     test_runtime_params();
     test_running_rearm();
+    test_auxiliary_zero_frames();
+    test_delayed_consumer_period();
+    test_hid_handoff_period();
+    test_owned_slot_rearm();
+    test_composite_permutations();
+    test_failure_recovery_traces();
     assert(data.lock.depth == 0);
     puts("inertia driver: PASS");
     return 0;

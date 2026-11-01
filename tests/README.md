@@ -71,7 +71,7 @@ INERTIA_NATIVE_ARTIFACTS=/absolute/fresh-endpoint bash /module/tests/endpoint-bo
 bash /module/tests/review-shared-hid/run.sh /resolved/workspace /absolute/fresh-hid
 ```
 
-Nineteen endpoint groups exercise the production driver, real kernel work/mutexes,
+Twenty-nine endpoint groups exercise the production driver, real kernel work/mutexes,
 threaded input and actual ZMK HID storage. They cover move/scroll pre-emit
 cancellation, cancellation during blocked submission, another pointer's first
 axis before sync, an independent scroll node and full-queue recovery without a
@@ -163,7 +163,7 @@ contract, so no production state/API/DTS/Kconfig is removed in this audit.
 | Stream/motion helpers | runtime/helpers_harness.c: same reset, independent state, qualification, manual cancellation and arithmetic |
 | Scheduled driver / queue admission | runtime/driver_harness.c: same ordered timing, first-axis cancellation, bounded pending frames, token generations, queue refusal/recovery, unlocked endpoint transaction |
 | Guarded probe | runtime/test_hook_harness.c: same test-hook behavior |
-| Real work/input/endpoint | endpoint-boundary: nineteen groups, three same-binary runs/core when changed; controlled endpoint is not physical transport |
+| Real work/input/endpoint | endpoint-boundary: twenty-nine groups, three same-binary runs/core when changed; controlled endpoint is not physical transport |
 | Actual other listener / shared HID | review-shared-hid: pending-report integrity, manual X before stale token/Y sync, exact first frame, final clearing; named controls retained |
 
 Scheduled inertia output uses an input-thread token callback and its own HID
@@ -186,7 +186,7 @@ Four added endpoint cases retain the original eight groups: move/scroll settings
 updates discard queued tokens, and complete while an accepted endpoint report
 is blocked. Committed reports finish intact and no later output escapes; setters
 finish within one simulated ms in these controlled cases. This is not an input
-queue or physical latency bound. Both cores run the nineteen-group binary three
+queue or physical latency bound. Both cores run the twenty-nine-group binary three
 times, alongside unchanged actual-listener/shared-HID and all 13 DTS/backend guards.
 DYA runtime also tests real registry rejection/apply and NVS persistence across
 three fresh first-boot/reload pairs of one binary. Actual Studio RPC/browser,
@@ -210,10 +210,10 @@ uses the same selection helper. This validates dependency selection, not hardwar
 
 ## Native-width timeout conversion
 
-The three Inertia work reservations use the same exact ceiling as Zephyr's
-`K_MSEC`. Their inputs remain uint16 milliseconds; trigger, report period,
-qualification, decay, sensitivity, cancellation and pending-token policy are
-unchanged. Clock rates through65536Hz use a checked uint32 numerator. Higher
+Millisecond trigger, report and queue-retry reservations use the same exact ceiling as Zephyr's
+`K_MSEC`. Their inputs remain uint16 milliseconds. This conversion preserves
+configured delays and the kernel tick ABI; the report/slot lifecycle is
+described below. Clock rates through65536Hz use a checked uint32 numerator. Higher
 rates split seconds and the fractional product before multiplication, retaining
 the configured `k_ticks_t` width without software64-bit division. No new clock
 restriction is introduced.
@@ -275,3 +275,72 @@ previously checked by `was_cancelled`; state reset, generation, exact report
 values/times and post-cancel silence assertions remain selected. This is the
 intentional replacement of the kernel cancellation mechanism, not removal of
 the output cancellation contract.
+
+## Composite zero axes, report cadence and node isolation
+
+The host driver fixture enumerates all 24 orders of a four-axis composite
+report for pointer/scroll, both signs, Ctrl held/released and three initial
+histories (fresh, preceding manual frame, active glide): 576 cases. Exact
+axes, velocity averages, sync and payload are preserved. Zero-only frames and
+nonzero mode changes still cancel, and a zero from another stream cannot reuse
+the first stream's history. The real-listener/shared-HID fixture retains its
+original three reports and appends two manual composite frames, their exact
+first `(135, 54)` inertia frame, and a zero-only stop: seven ordered reports.
+
+Four added endpoint groups hold the input consumer before token admission or
+hold the actual HID setter after admission, in both move and scroll. The next
+report must remain 100–102 simulated ms after the first in these controlled
+fixtures, with exact decay values and no post-cancel report. The pre-repair
+controls reproduce 9 ms and same-instant double output three times each.
+Four more groups rearm manual input while the HID setter is held, preserving
+an unexpired trigger or resuming one already overdue. These eight groups are
+added to all nineteen retained groups. The host tests also exercise rejected
+queued tokens and an owned in-flight slot across future/expired rearming.
+
+`move_report.queued`, `scroll_report.queued` and the test snapshot's
+`report_pending` mean slot ownership, including the accepted HID transaction.
+The worker cannot reuse that slot or advance its decay. Completion restarts
+the report interval for the same generation; a changed generation retains
+its trigger or resumes immediately when overdue. Queue refusal still drops
+one interval and retries, without creating a private backlog.
+
+All twenty adapter keys route changes only to their owning node; unrelated
+namespace/unknown-key events preserve both nodes. Initialization continues to
+apply all nodes. The former fixture's second-node bool assertion is retained
+under that node's own change event, rather than relying on another node's
+notification. The DYA registry/NVS fixture changes a different node after a
+direct runtime tune and checks that both its value and active generation
+survive. The pre-repair native binary fails that named isolation assertion on
+three fresh-flash runs; all existing persistence/reload assertions remain.
+
+The adapter sanitizer run additionally enables GCC's pointer-comparison check.
+The host registry now has one loop per foreach, matching the control-flow
+contract of the real linked section. Duplicate checks use registry order, not
+unrelated descriptor address ordering. This removes a host representation
+dependency; its sanitizer failure is not counted as an observed firmware bug.
+
+## Repeated output failures and complete glide traces
+
+Eight host traces cover move/scroll, both signs and normal/faulted execution.
+A fixed 50% decay has seven exact nonzero frames, a checked final stop tick,
+and exact ordered axes and totals. The faulted traces drop two intervals at
+input-queue admission, hold the following token past two periods, then fail
+two endpoint submissions before recovering. Invalid/equal parameter writes
+while the token is owned must preserve its generation and payload. Failed
+and successful motion totals are checked separately; no output may follow
+the stop tick.
+
+Two more native endpoint groups hold the first submission for 120 simulated
+ms and return `-EIO` for the first two attempts. With 50% decay, the exact
+outputs are 32, 16 and 8. The next attempt must wait 100–102 simulated ms
+after completion, including a failed submission. Slots and actual ZMK HID
+storage must clear on error, recovery must send exactly once, and cancellation
+must prohibit any later attempt. These extend the retained 27 groups to 29.
+The same tests on the earlier driver must reject compressed recovery with
+the named `failed endpoint compressed recovery interval` assertion. This is
+controlled endpoint failure, not a physical disconnect/reconnect test.
+
+For that earlier-source control only, set
+`INERTIA_NATIVE_MODE=endpoint-error-counterexample` on the same endpoint entry.
+It requires the named assertion, nonzero/non-timeout status and three runs of
+the same binary; default mode requires the complete 29-group PASS marker.

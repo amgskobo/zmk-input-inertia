@@ -60,6 +60,7 @@ fixtures = (
         "finish_motion_frame_locked",
         "decay_motion_locked",
         "decay_work",
+        "finish_report_locked",
         "inertia_input_callback",
         "move_decay_callback",
         "scroll_decay_callback",

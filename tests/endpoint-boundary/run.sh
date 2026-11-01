@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: MIT
 set -euo pipefail
 root="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
+mode="${INERTIA_NATIVE_MODE:-pass}"
+case "$mode" in pass|endpoint-error-counterexample) ;; *) echo 'unknown endpoint test mode' >&2; exit 2;; esac
 if [ -n "${INERTIA_NATIVE_ARTIFACTS:-}" ] && { [ -e "$INERTIA_NATIVE_ARTIFACTS" ] || [ -L "$INERTIA_NATIVE_ARTIFACTS" ]; }; then
     echo "output already exists: $INERTIA_NATIVE_ARTIFACTS" >&2
     exit 2
@@ -25,11 +27,22 @@ if [ -n "${INERTIA_NATIVE_ARTIFACTS:-}" ]; then
     cp "$work/build.log" "$work/build/CMakeCache.txt" "$INERTIA_NATIVE_ARTIFACTS/"
     cp "$work/build/zephyr/.config" "$INERTIA_NATIVE_ARTIFACTS/config"
     cp "$work/build/zephyr/zephyr.dts" "$work/build/zephyr/zmk.exe" "$INERTIA_NATIVE_ARTIFACTS/"
+    sha256sum "$work/build/zephyr/zmk.exe" >"$INERTIA_NATIVE_ARTIFACTS/binary.sha256"
 fi
 for run in 1 2 3; do
+    log="$work/run-$run.log"
+    if timeout 10 "$work/build/zephyr/zmk.exe" >"$log" 2>&1; then result=0; else result=$?; fi
+    cat "$log"
     if [ -n "${INERTIA_NATIVE_ARTIFACTS:-}" ]; then
-        timeout 10 "$work/build/zephyr/zmk.exe" | tee "$INERTIA_NATIVE_ARTIFACTS/run-$run.log"
+        cp "$log" "$INERTIA_NATIVE_ARTIFACTS/run-$run.log"
+        printf '%s\n' "$result" >"$INERTIA_NATIVE_ARTIFACTS/run-$run.exit"
+    fi
+    if [ "$mode" = endpoint-error-counterexample ]; then
+        test "$result" != 0 && test "$result" != 124
+        grep -Fq 'failed endpoint compressed recovery interval' "$log"
+        echo "REPRODUCED compressed endpoint recovery repeat $run exit $result"
     else
-        timeout 10 "$work/build/zephyr/zmk.exe"
+        test "$result" = 0
+        grep -Fq 'inertia endpoint boundary: PASS groups=29' "$log"
     fi
 done

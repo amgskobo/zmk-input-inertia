@@ -37,14 +37,17 @@ INPUT_CALLBACK_DEFINE(DEVICE_DT_GET(DT_NODELABEL(manual_pointer)), input_gate, N
 static K_SEM_DEFINE(entered, 0, 1);
 static K_SEM_DEFINE(resume_send, 0, 1);
 static K_SEM_DEFINE(other_sent, 0, 1);
+static K_SEM_DEFINE(composite_sent, 0, 2);
+static K_SEM_DEFINE(composite_glide, 0, 1);
+static K_SEM_DEFINE(composite_stopped, 0, 1);
 static atomic_t hold_send = ATOMIC_INIT(1);
 static atomic_t report_count;
-static struct zmk_hid_mouse_report_body reports[3];
+static struct zmk_hid_mouse_report_body reports[7];
 
 int __wrap_zmk_endpoint_send_mouse_report(void);
 int __wrap_zmk_endpoint_send_mouse_report(void) {
     int index = atomic_inc(&report_count);
-    __ASSERT_NO_MSG(index < 3);
+    __ASSERT_NO_MSG(index < 7);
     reports[index] = zmk_hid_get_mouse_report()->body;
     if (atomic_cas(&hold_send, 1, 0)) {
         __ASSERT_NO_MSG(reports[index].d_x == 90 && reports[index].d_y == 0);
@@ -56,10 +59,23 @@ int __wrap_zmk_endpoint_send_mouse_report(void) {
     } else if (index == 1) {
         __ASSERT_NO_MSG(reports[index].d_x == -7 && reports[index].d_y == 3);
         k_sem_give(&other_sent);
-    } else {
+    } else if (index == 2) {
         __ASSERT(reports[index].d_x == 3 && reports[index].d_y == -2,
                  "stale inertia reached output before manual frame");
         k_sem_give(&manual_sent);
+    } else if (index == 3 || index == 4) {
+        __ASSERT_NO_MSG(reports[index].d_x == 200 && reports[index].d_y == 80);
+        __ASSERT_NO_MSG(reports[index].d_scroll_x == 0 && reports[index].d_scroll_y == 0);
+        k_sem_give(&composite_sent);
+    } else if (index == 5) {
+        __ASSERT(reports[index].d_x == 135 && reports[index].d_y == 54,
+                 "composite zero axes changed first inertia report");
+        __ASSERT_NO_MSG(reports[index].d_scroll_x == 0 && reports[index].d_scroll_y == 0);
+        k_sem_give(&composite_glide);
+    } else {
+        __ASSERT_NO_MSG(reports[index].d_x == 0 && reports[index].d_y == 0);
+        __ASSERT_NO_MSG(reports[index].d_scroll_x == 0 && reports[index].d_scroll_y == 0);
+        k_sem_give(&composite_stopped);
     }
     return 0;
 }
@@ -121,7 +137,26 @@ static void review(void *a, void *b, void *c) {
     __ASSERT_NO_MSG(inertia_test_get_snapshot(inertia, OLD_STREAM, false,
                                              &snapshot) == 0);
     __ASSERT_NO_MSG(!snapshot.active && !snapshot.report_pending);
-    printk("inertia shared HID regression: PASS ordered_reports=3 real_manual_preemption=1\n");
+    /* Preserve both real axes and the preceding manual average when an
+     * auxiliary zero wheel moves from the end to the start of the report. */
+    __ASSERT_NO_MSG(input_report_rel(manual, INPUT_REL_X, 200, false, K_NO_WAIT) == 0);
+    __ASSERT_NO_MSG(input_report_rel(manual, INPUT_REL_Y, 80, false, K_NO_WAIT) == 0);
+    __ASSERT_NO_MSG(input_report_rel(manual, INPUT_REL_WHEEL, 0, true, K_NO_WAIT) == 0);
+    __ASSERT_NO_MSG(k_sem_take(&composite_sent, K_SECONDS(1)) == 0);
+    __ASSERT_NO_MSG(input_report_rel(manual, INPUT_REL_HWHEEL, 0, false, K_NO_WAIT) == 0);
+    __ASSERT_NO_MSG(input_report_rel(manual, INPUT_REL_X, 200, false, K_NO_WAIT) == 0);
+    __ASSERT_NO_MSG(input_report_rel(manual, INPUT_REL_Y, 80, true, K_NO_WAIT) == 0);
+    __ASSERT_NO_MSG(k_sem_take(&composite_sent, K_SECONDS(1)) == 0);
+    __ASSERT_NO_MSG(k_sem_take(&composite_glide, K_SECONDS(1)) == 0);
+    __ASSERT_NO_MSG(input_report_rel(manual, INPUT_REL_X, 0, false, K_NO_WAIT) == 0);
+    __ASSERT_NO_MSG(input_report_rel(manual, INPUT_REL_Y, 0, true, K_NO_WAIT) == 0);
+    __ASSERT_NO_MSG(k_sem_take(&composite_stopped, K_SECONDS(1)) == 0);
+    k_sleep(K_MSEC(130));
+    __ASSERT_NO_MSG(atomic_get(&report_count) == 7);
+    __ASSERT_NO_MSG(memcmp(&zero, &zmk_hid_get_mouse_report()->body, sizeof(zero)) == 0);
+    __ASSERT_NO_MSG(inertia_test_get_snapshot(inertia, MANUAL_STREAM, false, &snapshot) == 0);
+    __ASSERT_NO_MSG(!snapshot.active && !snapshot.report_pending);
+    printk("inertia shared HID regression: PASS ordered_reports=7 real_manual_preemption=1 composite_history=1\n");
     exit(0);
 }
 K_THREAD_DEFINE(shared_hid_review, 4096, review, NULL, NULL, NULL, 0, 0, 100);

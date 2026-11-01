@@ -48,14 +48,18 @@ static bool read_bool(const struct zmk_custom_setting *setting, bool *out) {
 }
 #define READ_INT(n, field, key, lo, hi) if (!read_int(&inertia_cs_##field##_##n, &params.field)) { break; }
 #define READ_BOOL(n, field, key) if (!read_bool(&inertia_cs_##field##_##n, &params.field)) { break; }
+#define MATCH_INT(n, field, key, lo, hi) changed_setting == &inertia_cs_##field##_##n ||
+#define MATCH_BOOL(n, field, key) changed_setting == &inertia_cs_##field##_##n ||
 #define APPLY(n) do { \
+    if (changed_setting != NULL && \
+        !(INERTIA_INT_FIELDS(MATCH_INT, n) INERTIA_BOOL_FIELDS(MATCH_BOOL, n) false)) { break; } \
     struct inertia_params params = {0}; \
     INERTIA_INT_FIELDS(READ_INT, n) INERTIA_BOOL_FIELDS(READ_BOOL, n) \
     if (inertia_set_params(DEVICE_DT_INST_GET(n), &params) != 0) { \
         LOG_WRN("Inertia settings snapshot rejected"); \
     } \
 } while (0);
-static void inertia_apply_settings(void) {
+static void inertia_apply_settings(const struct zmk_custom_setting *changed_setting) {
     /* Serialize entire read/apply transactions, including initialization. */
     k_mutex_lock(&settings_lock, K_FOREVER);
     DT_INST_FOREACH_STATUS_OKAY(APPLY)
@@ -64,7 +68,7 @@ static void inertia_apply_settings(void) {
 static int inertia_settings_event(const zmk_event_t *eh) {
     const struct zmk_custom_setting_changed *changed = as_zmk_custom_setting_changed(eh);
     if (changed != NULL && strcmp(changed->setting->custom_subsystem_id, ZMK_INPUT_INERTIA_SUBSYSTEM) != 0) { return ZMK_EV_EVENT_BUBBLE; }
-    inertia_apply_settings(); return ZMK_EV_EVENT_BUBBLE;
+    inertia_apply_settings(changed != NULL ? changed->setting : NULL); return ZMK_EV_EVENT_BUBBLE;
 }
 ZMK_LISTENER(inertia_custom_settings, inertia_settings_event);
 ZMK_SUBSCRIPTION(inertia_custom_settings, zmk_custom_setting_changed);
@@ -72,8 +76,12 @@ ZMK_SUBSCRIPTION(inertia_custom_settings, zmk_custom_settings_initialized);
 static int inertia_check_keys(void) {
     ZMK_CUSTOM_SETTING_FOREACH(setting) {
         if (strcmp(setting->custom_subsystem_id, ZMK_INPUT_INERTIA_SUBSYSTEM) != 0) { continue; }
+        bool preceding = true;
         ZMK_CUSTOM_SETTING_FOREACH(other) {
-            if (other < setting && strcmp(other->custom_subsystem_id, ZMK_INPUT_INERTIA_SUBSYSTEM) == 0 && strcmp(other->key, setting->key) == 0) { LOG_ERR("Duplicate Inertia setting key: %s", setting->key); }
+            /* Check preceding registry entries; do not depend on the address
+             * ordering of descriptors supplied by a registry implementation. */
+            if (other == setting) { preceding = false; }
+            if (preceding && strcmp(other->custom_subsystem_id, ZMK_INPUT_INERTIA_SUBSYSTEM) == 0 && strcmp(other->key, setting->key) == 0) { LOG_ERR("Duplicate Inertia setting key: %s", setting->key); }
         }
     }
     return 0;
