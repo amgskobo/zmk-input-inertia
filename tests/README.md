@@ -88,6 +88,65 @@ exact first manual frame. Both boundaries run one binary three times.
 The named negative controls prove that each regression can detect its defect;
 expected reproduction is separate from product PASS.
 
+### Endpoint and activity lifecycle
+
+The same endpoint binary retains its complete `groups=29` marker and adds
+`inertia lifecycle boundary: PASS groups=11`, required in all three repeats on
+both supported cores. The added cases use controlled endpoint identity/readiness
+as well as the existing controlled transport. Kernel work, mutexes, threaded
+input, actual ZMK event dispatch and shared HID storage remain real.
+
+Move and scroll cases cancel an armed trigger, a queued token while the real
+input thread is held, and future work while an accepted endpoint report is
+blocked. Cancellation must return within one simulated millisecond at handler
+entry, preserve an owned slot until consumption/completion, emit no later old
+report, and permit fresh input on the new peer. Two more cases change the
+selected endpoint before token admission without delivering its notification;
+the consumer must observe that identity change itself. No physical endpoint or
+input-queue latency bound follows from this fixture.
+
+IDLE and SLEEP cases prime the first node's movement plus stream1 scrolling on
+every other DTS Inertia node. Every stream of every node must retire. Initial
+and repeated endpoint/ACTIVE events preserve fresh motion, USB identity ignores
+unused BLE storage, a BLE-profile change cancels even without changing transport,
+and disconnect cancels existing motion. The fixture also records actual
+NULL-device callback delivery of the retired MSC tokens. That establishes the
+dispatcher boundary; the inspected core's unconditional activity submission
+remains a core-required accounting gap. It does not claim to measure or repair
+physical power or the core's activity timestamp.
+
+Host coverage includes these lifecycle functions, no-op/unknown/not-ready input,
+queued and already accepted reports, all streams, independent nodes and selected
+endpoint changes at decay/admission/completion. Existing exact traces, all576
+composite permutations, eight error-recovery traces and coverage gates remain.
+
+For an identified negative control, invoke the unchanged helper from the
+read-only source against a distinct disposable owner copy in container storage:
+
+```bash
+python3 "$OWNER_SOURCE/tests/endpoint-boundary/apply_lifecycle_fault.py" \
+  "$FAULT" "$STAGED_OWNER"
+INERTIA_NATIVE_MODE=lifecycle-counterexample \
+INERTIA_LIFECYCLE_CASE="$CASE" INERTIA_NATIVE_ARTIFACTS="$FRESH_OUTPUT" \
+  bash "$STAGED_OWNER/tests/endpoint-boundary/run.sh"
+```
+
+| Fault | Required selected cases | Required assertion |
+| --- | --- | --- |
+| `endpoint-retirement` | `endpoint-queued-move`, `endpoint-queued-scroll` | Lifecycle transition left an old stream active |
+| `activity-retirement` | `activity-idle`, `activity-sleep` | Lifecycle transition left an old stream active |
+| `first-stream-only` | `activity-sleep` | Lifecycle transition left an old stream active |
+| `endpoint-admission` | `endpoint-observed-move`, `endpoint-observed-scroll` | Old endpoint inertia reached the replacement target |
+| `noop-retirement` | `lifecycle-noop` | Initial or no-op lifecycle notification cancelled fresh motion |
+
+Run each selected fault/case on both cores, with a fresh output directory per
+entry. The owner command builds once and runs that exact binary three times,
+requiring the named behavioral assertion in each nonzero, non-timeout result.
+Compiler/dependency failures, unrelated crashes and missing markers do not count.
+Focused selection cannot satisfy the complete canonical entry. Existing endpoint
+error-recovery, shared-HID, manual-bypass, adapter, coverage/ABI and all13
+invalid-DTS/backend controls remain required.
+
 `CONFIG_INPUT_MODE_THREAD` is required. Independent inertia nodes remain
 independent; same-node streams share cancellation policy. Unrelated custom HID
 writers outside the input thread are not covered. Native endpoint acceptance

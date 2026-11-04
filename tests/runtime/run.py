@@ -30,7 +30,20 @@ import os
 mode = os.environ.get("ZMK_TEST_MODE", "quick")
 if mode not in ("quick", "full"):
     raise SystemExit("ZMK_TEST_MODE must be quick or full")
-variants = (('optimized', ['-O2']), ('sanitized', ['-O1', '-g', '-fno-omit-frame-pointer', '-fsanitize=address,undefined', '-fno-sanitize-recover=all']), ('coverage', ['-O0', '--coverage']))
+variants = (
+    ("optimized", ["-O2"]),
+    (
+        "sanitized",
+        [
+            "-O1",
+            "-g",
+            "-fno-omit-frame-pointer",
+            "-fsanitize=address,undefined",
+            "-fno-sanitize-recover=all",
+        ],
+    ),
+    ("coverage", ["-O0", "--coverage"]),
+)
 if mode == "quick":
     variants = tuple(v for v in variants if v[0] == "sanitized")
 
@@ -56,27 +69,42 @@ helpers = (
 fixtures = (
     ("timeout", "input_processor_inertia.c", timeouts, ()),
     ("helpers", "input_processor_inertia.c", helpers, ()),
-    ("driver", "input_processor_inertia.c", (
-        "finish_motion_frame_locked",
-        "decay_motion_locked",
-        "decay_work",
-        "finish_report_locked",
-        "inertia_input_callback",
-        "move_decay_callback",
-        "scroll_decay_callback",
-        "inertia_handle_event",
-        "inertia_init",
-        "#define INERTIA_FACTOR_Q8",
-        "inertia_device_valid",
-        "inertia_get_params",
-        "inertia_set_params",
-        "inertia_test_get_snapshot",
-        "inertia_test_timeout_ticks",
-    ), timeouts + helpers),
+    (
+        "driver",
+        "input_processor_inertia.c",
+        (
+            "cancel_all_motion_locked",
+            "sync_endpoint_locked",
+            "inertia_lifecycle_event",
+            "finish_motion_frame_locked",
+            "decay_motion_locked",
+            "decay_work",
+            "finish_report_locked",
+            "inertia_input_callback",
+            "move_decay_callback",
+            "scroll_decay_callback",
+            "inertia_handle_event",
+            "inertia_init",
+            "#define INERTIA_FACTOR_Q8",
+            "inertia_device_valid",
+            "inertia_get_params",
+            "inertia_set_params",
+            "inertia_test_get_snapshot",
+            "inertia_test_timeout_ticks",
+        ),
+        timeouts + helpers,
+    ),
     # The weak default the test build's emit hook falls back to.
-    ("test_hook", "input_processor_inertia.c", (
-        "inertia_test_before_emit", "inertia_test_before_decay", "inertia_test_after_decay",
-    ), ()),
+    (
+        "test_hook",
+        "input_processor_inertia.c",
+        (
+            "inertia_test_before_emit",
+            "inertia_test_before_decay",
+            "inertia_test_after_decay",
+        ),
+        (),
+    ),
 )
 
 
@@ -91,12 +119,12 @@ def definition(source, name):
     skip = int(nth or 1) - 1
     for match in re.finditer(r"\b" + name + r"\s*\(", source):
         closing = source.find(")", match.end())
-        if not source[closing + 1:].lstrip().startswith("{"):
+        if not source[closing + 1 :].lstrip().startswith("{"):
             continue  # a call or a prototype
         start = source.rfind("\n", 0, match.start()) + 1
         if start == match.start():
             start = source.rfind("\n", 0, start - 1) + 1  # return type on its own line
-        head = source[start:match.start()]
+        head = source[start : match.start()]
         if not head or head[0].isspace() or head.startswith("#"):
             continue  # a call inside a body or a macro
         if skip:
@@ -155,7 +183,11 @@ def misses(gcov_text, ranges):
         found = re.match(r"\s*([^:]+):\s*(\d+):(.*)", row)
         if not found:
             continue
-        count, number, text = found.group(1).strip(), int(found.group(2)), found.group(3)
+        count, number, text = (
+            found.group(1).strip(),
+            int(found.group(2)),
+            found.group(3),
+        )
         inside = any(first <= number <= last for first, last in ranges)
         current = (count, number, text) if inside else None
         if not inside or count == "-":
@@ -171,7 +203,9 @@ def misses(gcov_text, ranges):
     if not ranges or not lines:
         raise RuntimeError("coverage report has no executable lines in gated functions")
     if any(count == 0 for count in observed):
-        raise RuntimeError("coverage report has no executable lines for a gated function range")
+        raise RuntimeError(
+            "coverage report has no executable lines for a gated function range"
+        )
     return lines, executed, branches, taken, missed
 
 
@@ -186,13 +220,18 @@ def ungated_functions():
         gated.setdefault(file_name, set()).update(name.split(":")[0] for name in names)
     definition_pattern = re.compile(
         r"^(?:static\s+|__weak\s+)?(?:inline\s+)?(?:const\s+)?[a-z_0-9]+(?:\s+[a-z_0-9]+)?"
-        r"[\s*]+([a-z_0-9]+)\([^;]*?\)\s*\{", re.M)
+        r"[\s*]+([a-z_0-9]+)\([^;]*?\)\s*\{",
+        re.M,
+    )
     missing = []
     for path in sorted(source_dir.glob("*.c")):
         if path.name in elsewhere:
             continue
         defined = set(definition_pattern.findall(path.read_text(encoding="utf-8")))
-        missing += [f"{path.name}: {name}" for name in sorted(defined - gated.get(path.name, set()))]
+        missing += [
+            f"{path.name}: {name}"
+            for name in sorted(defined - gated.get(path.name, set()))
+        ]
     return missing
 
 
@@ -214,16 +253,26 @@ def render_fixture(file_name, gated, support, harness_path):
 
     harness = harness_path.read_text(encoding="utf-8")
     if "/* DRIVER_TYPES */" in harness:
-        types=[]
-        for name in ("inertia_config","inertia_motion_state","inertia_pending_report","inertia_stream","inertia_data"):
-            match=re.search(r"^struct "+name+r" \{.*?^\};",source,re.M|re.S)
-            if match is None: raise RuntimeError("missing production type: "+name)
+        types = []
+        for name in (
+            "inertia_config",
+            "inertia_motion_state",
+            "inertia_pending_report",
+            "inertia_stream",
+            "inertia_data",
+        ):
+            match = re.search(r"^struct " + name + r" \{.*?^\};", source, re.M | re.S)
+            if match is None:
+                raise RuntimeError("missing production type: " + name)
             types.append(match.group())
-        harness=harness.replace("/* DRIVER_TYPES */","struct inertia_data;\n"+"\n".join(types))
+        harness = harness.replace(
+            "/* DRIVER_TYPES */", "struct inertia_data;\n" + "\n".join(types)
+        )
     marker = "/* DRIVER_FUNCTIONS */"
     resume = harness.count("\n", 0, harness.index(marker)) + 2
-    return harness.replace(marker, "\n".join(functions) +
-                           f'\n#line {resume} "{harness_path}"'), ranges
+    return harness.replace(
+        marker, "\n".join(functions) + f'\n#line {resume} "{harness_path}"'
+    ), ranges
 
 
 if sys.argv[1:]:
@@ -232,43 +281,70 @@ if sys.argv[1:]:
     output = pathlib.Path(sys.argv[2])
     if output.exists() or output.is_symlink():
         raise SystemExit(f"source output already exists: {output}")
-    unit, _ = render_fixture("input_processor_inertia.c", timeouts, (),
-                             root / "tests/runtime/timeout_harness.c")
+    unit, _ = render_fixture(
+        "input_processor_inertia.c",
+        timeouts,
+        (),
+        root / "tests/runtime/timeout_harness.c",
+    )
     output.write_text(unit, encoding="utf-8")
     raise SystemExit(0)
 
 missing_functions = ungated_functions()
 if missing_functions:
-    raise RuntimeError("functions no fixture gates:\n  " + "\n  ".join(missing_functions))
+    raise RuntimeError(
+        "functions no fixture gates:\n  " + "\n  ".join(missing_functions)
+    )
 
 for fixture, file_name, gated, support in fixtures:
     source_path = source_dir / file_name
-    generated, ranges = render_fixture(file_name, gated, support,
-                                       root / "tests/runtime" / f"{fixture}_harness.c")
+    generated, ranges = render_fixture(
+        file_name, gated, support, root / "tests/runtime" / f"{fixture}_harness.c"
+    )
     with tempfile.TemporaryDirectory(prefix=f"{fixture}-runtime-") as folder:
         work = pathlib.Path(folder)
         unit = work / "test.c"
         unit.write_text(generated, encoding="utf-8")
         for variant, flags in variants:
             binary = work / variant
-            subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror", *flags,
-                            "-I" + str(root / "include"), "-I" + str(source_dir),
-                            "-I" + str(root / "tests/runtime"),
-                            str(unit), *map(str, links), "-o", str(binary)],
-                           check=True)
+            subprocess.run(
+                [
+                    "cc",
+                    "-std=c11",
+                    "-Wall",
+                    "-Wextra",
+                    "-Werror",
+                    *flags,
+                    "-I" + str(root / "include"),
+                    "-I" + str(source_dir),
+                    "-I" + str(root / "tests/runtime"),
+                    str(unit),
+                    *map(str, links),
+                    "-o",
+                    str(binary),
+                ],
+                check=True,
+            )
             subprocess.run([str(binary)], check=True)
         if mode == "quick":
             print(f"{fixture}: PASS (all scenarios, ASan/UBSan)")
             continue
-        subprocess.run(["gcov", "-b", "-c", "-o", str(work / "coverage-test.gcno"), str(unit)],
-                       cwd=work, check=True, capture_output=True, text=True)
+        subprocess.run(
+            ["gcov", "-b", "-c", "-o", str(work / "coverage-test.gcno"), str(unit)],
+            cwd=work,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
         report = (work / f"{file_name}.gcov").read_text(encoding="utf-8")
         lines, executed, branches, taken, missed = misses(report, ranges)
         count = sum(not name.startswith("#") for name in gated)
-        print(f"{fixture}: {count} functions of {file_name}: "
-              f"lines {executed}/{lines}, branches {taken}/{branches}")
+        print(
+            f"{fixture}: {count} functions of {file_name}: "
+            f"lines {executed}/{lines}, branches {taken}/{branches}"
+        )
         if missed:
             print("\n".join(missed))
             raise RuntimeError(f"{fixture} fell below 100% coverage")
 
-subprocess.run(["python3",str(root/"tests/runtime/settings.py")],check=True)
+subprocess.run(["python3", str(root / "tests/runtime/settings.py")], check=True)

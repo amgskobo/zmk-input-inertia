@@ -22,6 +22,8 @@
 #include <drivers/input_processor.h>
 #include <dt-bindings/zmk/modifiers.h>
 #include <zmk/endpoints.h>
+#include <zmk/events/activity_state_changed.h>
+#include <zmk/events/endpoint_changed.h>
 #include <zmk/hid.h>
 #include <zmk/workqueue.h>
 
@@ -42,8 +44,7 @@ LOG_MODULE_REGISTER(zmk_input_inertia_input_processor_inertia, CONFIG_ZMK_INPUT_
 
 /* Normal ZMK pointing listeners and inertia emission must share one consumer.
  * Synchronous input callbacks would reintroduce cross-thread HID mutation. */
-BUILD_ASSERT(IS_ENABLED(CONFIG_INPUT_MODE_THREAD),
-             "Inertia requires CONFIG_INPUT_MODE_THREAD");
+BUILD_ASSERT(IS_ENABLED(CONFIG_INPUT_MODE_THREAD), "Inertia requires CONFIG_INPUT_MODE_THREAD");
 
 struct inertia_config {
     uint16_t move_decay_factor_q8;
@@ -95,6 +96,8 @@ struct inertia_data {
     const struct device *dev;
     struct inertia_stream streams[INERTIA_STREAM_COUNT];
     struct k_mutex lock;
+    struct zmk_endpoint_instance endpoint;
+    enum zmk_activity_state activity_state;
 };
 
 /* Inertia intervals are uint16 milliseconds. At ordinary clock rates the
@@ -106,8 +109,7 @@ static k_ticks_t inertia_ticks_from_ms(uint16_t ms, uint32_t hz) {
     }
     const uint32_t seconds = ms / 1000U;
     const uint32_t remainder = ms % 1000U;
-    const uint32_t fraction = remainder * (hz / 1000U) +
-                              (remainder * (hz % 1000U) + 999U) / 1000U;
+    const uint32_t fraction = remainder * (hz / 1000U) + (remainder * (hz % 1000U) + 999U) / 1000U;
     return (k_ticks_t)seconds * hz + fraction;
 }
 
@@ -160,6 +162,44 @@ static void cancel_scroll_locked(struct inertia_stream *stream) {
     disarm_work_locked(&stream->scroll_work);
     atomic_inc(&stream->scroll.generation);
     clear_motion_state(&stream->scroll);
+}
+
+static void cancel_all_motion_locked(struct inertia_data *data) {
+    for (size_t i = 0U; i < INERTIA_STREAM_COUNT; i++) {
+        cancel_move_locked(&data->streams[i]);
+        cancel_scroll_locked(&data->streams[i]);
+    }
+}
+
+/* Compare endpoint identity, including the BLE profile. Repeat/no-op events
+ * preserve motion; an actual transition retires every stream and queued token
+ * without reusing a slot still owned by its input/HID transaction. */
+static void sync_endpoint_locked(struct inertia_data *data, struct zmk_endpoint_instance endpoint) {
+    if (!zmk_endpoint_instance_eq(data->endpoint, endpoint)) {
+        data->endpoint = endpoint;
+        cancel_all_motion_locked(data);
+    }
+}
+
+static int inertia_lifecycle_event(const struct device *dev, const zmk_event_t *eh) {
+    if (!device_is_ready(dev)) {
+        return ZMK_EV_EVENT_BUBBLE;
+    }
+    const struct zmk_endpoint_changed *endpoint = as_zmk_endpoint_changed(eh);
+    const struct zmk_activity_state_changed *activity = as_zmk_activity_state_changed(eh);
+    struct inertia_data *data = dev->data;
+    k_mutex_lock(&data->lock, K_FOREVER);
+    if (endpoint != NULL) {
+        sync_endpoint_locked(data, endpoint->endpoint);
+    }
+    if (activity != NULL && data->activity_state != activity->state) {
+        data->activity_state = activity->state;
+        if (activity->state != ZMK_ACTIVITY_ACTIVE) {
+            cancel_all_motion_locked(data);
+        }
+    }
+    k_mutex_unlock(&data->lock);
+    return ZMK_EV_EVENT_BUBBLE;
 }
 
 /*
@@ -301,6 +341,7 @@ static void decay_work(struct inertia_stream *stream, bool scroll) {
     inertia_test_before_decay(data->dev, (size_t)(stream - data->streams), scroll);
 #endif
     k_mutex_lock(&data->lock, K_FOREVER);
+    sync_endpoint_locked(data, zmk_endpoint_get_selected());
     uint16_t interval = scroll ? config->scroll_interval_ms : config->move_interval_ms;
     uint16_t factor = scroll ? config->scroll_decay_factor_q8 : config->move_decay_factor_q8;
     uint16_t threshold = scroll ? config->scroll_threshold_stop : config->move_threshold_stop;
@@ -334,8 +375,8 @@ static void decay_work(struct inertia_stream *stream, bool scroll) {
     pending->generation = (uint32_t)atomic_get(&motion->generation);
     pending->queued = true;
     uint16_t code = (uint16_t)(2U * (size_t)(stream - data->streams) + scroll);
-    int err = input_report(data->dev, INPUT_EV_MSC, code, (int32_t)pending->generation,
-                           true, K_NO_WAIT);
+    int err =
+        input_report(data->dev, INPUT_EV_MSC, code, (int32_t)pending->generation, true, K_NO_WAIT);
     if (err != 0) {
         pending->queued = false;
         (void)k_work_reschedule_for_queue(zmk_workqueue_lowprio_work_q(), work,
@@ -352,8 +393,7 @@ static void move_decay_callback(struct k_work *work) {
     struct inertia_stream *stream = CONTAINER_OF(dwork, struct inertia_stream, move_work);
     decay_work(stream, false);
 #if IS_ENABLED(CONFIG_ZMK_INPUT_INERTIA_TEST)
-    inertia_test_after_decay(stream->owner->dev,
-                             (size_t)(stream - stream->owner->streams), false);
+    inertia_test_after_decay(stream->owner->dev, (size_t)(stream - stream->owner->streams), false);
 #endif
 }
 
@@ -362,13 +402,12 @@ static void scroll_decay_callback(struct k_work *work) {
     struct inertia_stream *stream = CONTAINER_OF(dwork, struct inertia_stream, scroll_work);
     decay_work(stream, true);
 #if IS_ENABLED(CONFIG_ZMK_INPUT_INERTIA_TEST)
-    inertia_test_after_decay(stream->owner->dev,
-                             (size_t)(stream - stream->owner->streams), true);
+    inertia_test_after_decay(stream->owner->dev, (size_t)(stream - stream->owner->streams), true);
 #endif
 }
 
-static void finish_report_locked(struct inertia_stream *stream, bool scroll,
-                                  uint32_t generation, bool committed) {
+static void finish_report_locked(struct inertia_stream *stream, bool scroll, uint32_t generation,
+                                 bool committed) {
     struct inertia_data *data = stream->owner;
     struct inertia_motion_state *motion = scroll ? &stream->scroll : &stream->move;
     struct inertia_pending_report *pending = scroll ? &stream->scroll_report : &stream->move_report;
@@ -379,7 +418,8 @@ static void finish_report_locked(struct inertia_stream *stream, bool scroll,
         return;
     }
     if (committed && generation == (uint32_t)atomic_get(&motion->generation)) {
-        uint16_t interval = scroll ? data->config.scroll_interval_ms : data->config.move_interval_ms;
+        uint16_t interval =
+            scroll ? data->config.scroll_interval_ms : data->config.move_interval_ms;
         (void)k_work_reschedule_for_queue(zmk_workqueue_lowprio_work_q(), work,
                                           inertia_timeout_ms(interval));
     } else if (k_work_delayable_remaining_get(work) == 0) {
@@ -410,6 +450,7 @@ static void inertia_input_callback(struct input_event *event, void *user_data) {
     inertia_test_before_emit(data->dev, index, scroll);
 #endif
     k_mutex_lock(&data->lock, K_FOREVER);
+    sync_endpoint_locked(data, zmk_endpoint_get_selected());
     if (!pending->queued || pending->generation != (uint32_t)event->value) {
         k_mutex_unlock(&data->lock);
         return;
@@ -446,6 +487,7 @@ static void inertia_input_callback(struct input_event *event, void *user_data) {
         zmk_hid_mouse_movement_set(0, 0);
     }
     k_mutex_lock(&data->lock, K_FOREVER);
+    sync_endpoint_locked(data, zmk_endpoint_get_selected());
     finish_report_locked(stream, scroll, generation, true);
     k_mutex_unlock(&data->lock);
     if (err != 0) {
@@ -472,6 +514,7 @@ static int inertia_handle_event(const struct device *dev, struct input_event *ev
     }
 
     k_mutex_lock(&data->lock, K_FOREVER);
+    sync_endpoint_locked(data, zmk_endpoint_get_selected());
 
     /* Zero axes in a composite report do not select a new motion kind. Keep
      * the same stream's buffered/manual history until a nonzero axis selects
@@ -531,6 +574,8 @@ static int inertia_init(const struct device *dev) {
     data->dev = dev;
     data->config = *(const struct inertia_config *)dev->config;
     k_mutex_init(&data->lock);
+    data->endpoint = zmk_endpoint_get_selected();
+    data->activity_state = ZMK_ACTIVITY_ACTIVE;
 
     for (size_t i = 0U; i < INERTIA_STREAM_COUNT; i++) {
         struct inertia_stream *stream = &data->streams[i];
@@ -561,8 +606,12 @@ static bool inertia_device_valid(const struct device *dev) {
     return dev != NULL && dev->api == &inertia_driver_api && device_is_ready(dev);
 }
 int inertia_get_params(const struct device *dev, struct inertia_params *out) {
-    if (out == NULL) { return -EINVAL; }
-    if (!inertia_device_valid(dev)) { return -ENODEV; }
+    if (out == NULL) {
+        return -EINVAL;
+    }
+    if (!inertia_device_valid(dev)) {
+        return -ENODEV;
+    }
     struct inertia_data *data = dev->data;
     k_mutex_lock(&data->lock, K_FOREVER);
     const struct inertia_config *c = &data->config;
@@ -572,40 +621,57 @@ int inertia_get_params(const struct device *dev, struct inertia_params *out) {
         .scroll_decay_factor_int = (c->scroll_decay_factor_q8 * 100 + 255) / 256,
         .move_report_interval_ms = c->move_interval_ms,
         .scroll_report_interval_ms = c->scroll_interval_ms,
-        .move_threshold_start = c->move_threshold_start, .move_threshold_stop = c->move_threshold_stop,
-        .scroll_threshold_start = c->scroll_threshold_start, .scroll_threshold_stop = c->scroll_threshold_stop,
+        .move_threshold_start = c->move_threshold_start,
+        .move_threshold_stop = c->move_threshold_stop,
+        .scroll_threshold_start = c->scroll_threshold_start,
+        .scroll_threshold_stop = c->scroll_threshold_stop,
         .cancel_scroll_inertia_on_ctrl = c->cancel_scroll_inertia_on_ctrl,
     };
     k_mutex_unlock(&data->lock);
     return 0;
 }
 int inertia_set_params(const struct device *dev, const struct inertia_params *params) {
-    if (params == NULL) { return -EINVAL; }
-    if (!inertia_device_valid(dev)) { return -ENODEV; }
-#define VALIDATE(n, field, key, lo, hi) if (params->field < (lo) || params->field > (hi)) { return -EINVAL; }
+    if (params == NULL) {
+        return -EINVAL;
+    }
+    if (!inertia_device_valid(dev)) {
+        return -ENODEV;
+    }
+#define VALIDATE(n, field, key, lo, hi)                                                            \
+    if (params->field < (lo) || params->field > (hi)) {                                            \
+        return -EINVAL;                                                                            \
+    }
     INERTIA_INT_FIELDS(VALIDATE, 0)
 #undef VALIDATE
     if (params->move_threshold_stop >= params->move_threshold_start ||
-        params->scroll_threshold_stop >= params->scroll_threshold_start) { return -EINVAL; }
+        params->scroll_threshold_stop >= params->scroll_threshold_start) {
+        return -EINVAL;
+    }
     const struct inertia_config next = {
         .trigger_ms = params->trigger_ms,
         .move_decay_factor_q8 = INERTIA_FACTOR_Q8(params->move_decay_factor_int),
         .scroll_decay_factor_q8 = INERTIA_FACTOR_Q8(params->scroll_decay_factor_int),
         .move_interval_ms = params->move_report_interval_ms,
         .scroll_interval_ms = params->scroll_report_interval_ms,
-        .move_threshold_start = params->move_threshold_start, .move_threshold_stop = params->move_threshold_stop,
-        .scroll_threshold_start = params->scroll_threshold_start, .scroll_threshold_stop = params->scroll_threshold_stop,
+        .move_threshold_start = params->move_threshold_start,
+        .move_threshold_stop = params->move_threshold_stop,
+        .scroll_threshold_start = params->scroll_threshold_start,
+        .scroll_threshold_stop = params->scroll_threshold_stop,
         .cancel_scroll_inertia_on_ctrl = params->cancel_scroll_inertia_on_ctrl,
     };
     struct inertia_data *data = dev->data;
     k_mutex_lock(&data->lock, K_FOREVER);
     const struct inertia_config *c = &data->config;
     bool same = c->trigger_ms == next.trigger_ms &&
-        c->move_decay_factor_q8 == next.move_decay_factor_q8 && c->scroll_decay_factor_q8 == next.scroll_decay_factor_q8 &&
-        c->move_interval_ms == next.move_interval_ms && c->scroll_interval_ms == next.scroll_interval_ms &&
-        c->move_threshold_start == next.move_threshold_start && c->move_threshold_stop == next.move_threshold_stop &&
-        c->scroll_threshold_start == next.scroll_threshold_start && c->scroll_threshold_stop == next.scroll_threshold_stop &&
-        c->cancel_scroll_inertia_on_ctrl == next.cancel_scroll_inertia_on_ctrl;
+                c->move_decay_factor_q8 == next.move_decay_factor_q8 &&
+                c->scroll_decay_factor_q8 == next.scroll_decay_factor_q8 &&
+                c->move_interval_ms == next.move_interval_ms &&
+                c->scroll_interval_ms == next.scroll_interval_ms &&
+                c->move_threshold_start == next.move_threshold_start &&
+                c->move_threshold_stop == next.move_threshold_stop &&
+                c->scroll_threshold_start == next.scroll_threshold_start &&
+                c->scroll_threshold_stop == next.scroll_threshold_stop &&
+                c->cancel_scroll_inertia_on_ctrl == next.cancel_scroll_inertia_on_ctrl;
     if (!same) {
         data->config = next;
         for (size_t i = 0; i < INERTIA_STREAM_COUNT; i++) {
@@ -660,11 +726,17 @@ int inertia_set_params(const struct device *dev, const struct inertia_params *pa
     static struct inertia_data processor_inertia_data_##n;                                         \
     DEVICE_DT_INST_DEFINE(n, inertia_init, NULL, &processor_inertia_data_##n,                      \
                           &processor_inertia_config_##n, POST_KERNEL,                              \
-                          CONFIG_KERNEL_INIT_PRIORITY_DEFAULT, &inertia_driver_api);                                                   \
-    static void inertia_input_callback_##n(struct input_event *event, void *user_data) {             \
-        inertia_input_callback(event, user_data);                                                   \
+                          CONFIG_KERNEL_INIT_PRIORITY_DEFAULT, &inertia_driver_api);               \
+    static void inertia_input_callback_##n(struct input_event *event, void *user_data) {           \
+        inertia_input_callback(event, user_data);                                                  \
     }                                                                                              \
-    INPUT_CALLBACK_DEFINE(DEVICE_DT_INST_GET(n), inertia_input_callback_##n, NULL);
+    INPUT_CALLBACK_DEFINE(DEVICE_DT_INST_GET(n), inertia_input_callback_##n, NULL);                \
+    static int inertia_lifecycle_callback_##n(const zmk_event_t *eh) {                             \
+        return inertia_lifecycle_event(DEVICE_DT_INST_GET(n), eh);                                 \
+    }                                                                                              \
+    ZMK_LISTENER(inertia_lifecycle_##n, inertia_lifecycle_callback_##n);                           \
+    ZMK_SUBSCRIPTION(inertia_lifecycle_##n, zmk_endpoint_changed);                                 \
+    ZMK_SUBSCRIPTION(inertia_lifecycle_##n, zmk_activity_state_changed);
 
 DT_INST_FOREACH_STATUS_OKAY(INERTIA_INST)
 

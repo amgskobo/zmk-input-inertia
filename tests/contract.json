@@ -11,7 +11,7 @@
     },
     {
       "fixture": "tests/runtime/driver_harness.c",
-      "asserts": "Per-stream scheduling, rearm deadlines, first-axis manual preemption, bounded queued/in-flight slots, completion-based cadence, future/expired trigger recovery, generation validation, full-queue recovery, 576 signed/Ctrl/history composite-axis permutations, and eight complete normal/faulted signed move/scroll traces with exact values, ticks, stop and separate attempted/delivered totals"
+      "asserts": "Per-stream scheduling, rearm deadlines, first-axis manual preemption, bounded queued/in-flight slots, completion-based cadence, future/expired trigger recovery, generation validation, full-queue recovery, 576 signed/Ctrl/history composite-axis permutations, eight complete normal/faulted signed move/scroll traces with exact values/ticks/totals, plus endpoint identity/no-op/disconnect and activity lifecycle cancellation at decay/admission/completion on all streams and independent nodes"
     },
     {
       "fixture": "tests/runtime/test_hook_harness.c",
@@ -33,9 +33,10 @@
     "command": "bash tests/endpoint-boundary/run.sh",
     "setup": "Run in an already resolved owner west workspace; no fetch or revision changes",
     "fixture": "tests/endpoint-boundary/module/src/boundary.c",
-    "asserts": "Twenty-nine groups: all twenty-seven retained endpoint/settings/timeout/rearm/cadence groups plus two move/scroll endpoint error/recovery cases. Exact first/next outputs,100-102ms controlled report gaps through blocked and repeated failed submissions, actual HID/slot clearing and post-cancel silence; all original values/time/independence assertions retained",
+    "asserts": "Retain all29 endpoint/settings/timeout/rearm/cadence/error groups and their exact first/next outputs,100-102ms report gaps, HID/slot clearing and post-cancel silence. Add11 lifecycle groups: armed/queued/accepted move+scroll endpoint cancellation, admission before notification, IDLE/SLEEP on every node/nonzero streams, no-op/profile/disconnect and fresh recovery. Actual NULL-device callback observes stale MSC tokens, retaining the core activity-accounting gap.",
     "repeats": 3,
-    "backend": "native_sim//zmk_test_mock, production driver/ZMK HID/kernel APIs, wrapped transport only"
+    "backend": "native_sim//zmk_test_mock, production driver/ZMK HID/event/kernel APIs, controlled endpoint identity/readiness and transport",
+    "lifecycle_negative_controls": "apply_lifecycle_fault.py FAULT DISTINCT_STAGED_OWNER plus INERTIA_NATIVE_MODE=lifecycle-counterexample and named INERTIA_LIFECYCLE_CASE; both cores,3 repeats each, specific behavioral assertions; see tests/README.md"
   },
   "infrastructure": {
     "fixtures": [
@@ -70,5 +71,6 @@
   },
   "suppression_scope": "No source-button/final-frame policy. Retain scheduled motion token admission, first-axis cancellation and input-thread HID serialization; final source filter is not a global output interceptor.",
   "runtime_settings": "Public runtime API, actual-source adapter, all100 percentage round trips and coupled thresholds; real kernel settings cancellation plus DYA registry/NVS reload; tests/README.md",
-  "timeout_conversion": "Preserve exact Zephyr rounding and configured tick ABI for fulluint16 wait range. Native32 numerator through65536Hz, overflow-safe seconds/fraction split above. Test-only probe exposes actual conversion result and is excluded from normal firmware."
+  "timeout_conversion": "Preserve exact Zephyr rounding and configured tick ABI for fulluint16 wait range. Native32 numerator through65536Hz, overflow-safe seconds/fraction split above. Test-only probe exposes actual conversion result and is excluded from normal firmware.",
+  "activity_accounting_gap": "Zephyr wildcard callbacks receive all internal MSC tokens and selected ZMK submits activity work unconditionally. Lifecycle cancellation retires output/timers but cannot exclude connected, queued stale or newly disconnected-run tokens from core activity accounting. Core filter required; no private dispatcher/event mutation or physical power claim."
 }

@@ -7,20 +7,38 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <zmk-input-inertia/inertia_core.h>
+#include "lifecycle_inputs.h"
 
 typedef int atomic_t;
-typedef struct { int ticks; } k_timeout_t;
-struct k_work_delayable { int unused; };
-struct k_work_q { int unused; };
-struct k_mutex { int unused; };
-struct device { const void *config; void *data; };
+typedef struct {
+    int ticks;
+} k_timeout_t;
+struct k_work_delayable {
+    int unused;
+};
+struct k_work_q {
+    int unused;
+};
+struct k_mutex {
+    int unused;
+};
+struct device {
+    const void *config;
+    void *data;
+};
 #define IS_ENABLED(x) x
 #define CONFIG_ZMK_INPUT_INERTIA_TEST 1
 #define INERTIA_STREAM_COUNT 2
 #define K_FOREVER ((k_timeout_t){-1})
 /* DRIVER_TYPES */
-struct zmk_input_processor_state { size_t input_device_index; };
-struct keyboard_report { struct { unsigned modifiers; } body; };
+struct zmk_input_processor_state {
+    size_t input_device_index;
+};
+struct keyboard_report {
+    struct {
+        unsigned modifiers;
+    } body;
+};
 static struct keyboard_report report;
 #define MOD_LCTL 1u
 #define MOD_RCTL 2u
@@ -29,8 +47,8 @@ static struct k_work_q lowprio_queue;
 static struct k_work_q *zmk_workqueue_lowprio_work_q(void) { return &lowprio_queue; }
 static int disarms;
 static struct k_work_delayable *disarmed[8];
-static int k_work_reschedule_for_queue(struct k_work_q *queue,
-                                      struct k_work_delayable *work, k_timeout_t delay) {
+static int k_work_reschedule_for_queue(struct k_work_q *queue, struct k_work_delayable *work,
+                                       k_timeout_t delay) {
     assert(queue == &lowprio_queue && delay.ticks == K_FOREVER.ticks);
     disarmed[disarms++ % 8] = work;
     return 1;

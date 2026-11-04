@@ -3,7 +3,21 @@
 set -euo pipefail
 root="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
 mode="${INERTIA_NATIVE_MODE:-pass}"
-case "$mode" in pass|endpoint-error-counterexample) ;; *) echo 'unknown endpoint test mode' >&2; exit 2;; esac
+case "$mode" in pass|endpoint-error-counterexample|lifecycle-counterexample) ;; *) echo 'unknown endpoint test mode' >&2; exit 2;; esac
+if [ "$mode" = lifecycle-counterexample ]; then
+    case "${INERTIA_LIFECYCLE_CASE:-}" in
+        endpoint-queued-move|endpoint-queued-scroll|activity-idle|activity-sleep)
+            lifecycle_assertion='Lifecycle transition left an old stream active' ;;
+        endpoint-observed-move|endpoint-observed-scroll)
+            lifecycle_assertion='Old endpoint inertia reached the replacement target' ;;
+        lifecycle-noop)
+            lifecycle_assertion='Initial or no-op lifecycle notification cancelled fresh motion' ;;
+        *) echo 'select a named lifecycle counterexample case' >&2; exit 2 ;;
+    esac
+elif [ -n "${INERTIA_LIFECYCLE_CASE:-}" ]; then
+    echo 'focused lifecycle selection cannot replace the complete canonical entry' >&2
+    exit 2
+fi
 if [ -n "${INERTIA_NATIVE_ARTIFACTS:-}" ] && { [ -e "$INERTIA_NATIVE_ARTIFACTS" ] || [ -L "$INERTIA_NATIVE_ARTIFACTS" ]; }; then
     echo "output already exists: $INERTIA_NATIVE_ARTIFACTS" >&2
     exit 2
@@ -41,8 +55,13 @@ for run in 1 2 3; do
         test "$result" != 0 && test "$result" != 124
         grep -Fq 'failed endpoint compressed recovery interval' "$log"
         echo "REPRODUCED compressed endpoint recovery repeat $run exit $result"
+    elif [ "$mode" = lifecycle-counterexample ]; then
+        test "$result" != 0 && test "$result" != 124
+        grep -Fq "$lifecycle_assertion" "$log"
+        echo "REPRODUCED lifecycle case $INERTIA_LIFECYCLE_CASE repeat $run exit $result"
     else
         test "$result" = 0
         grep -Fq 'inertia endpoint boundary: PASS groups=29' "$log"
+        grep -Fq 'inertia lifecycle boundary: PASS groups=11' "$log"
     fi
 done

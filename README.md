@@ -208,6 +208,28 @@ writes HID outside the normal input path.
 `CONFIG_INPUT_MODE_THREAD` is required (the Zephyr default). Synchronous input
 mode is rejected at build time because it would run HID writes concurrently.
 
+Endpoint identity changes, including a BLE profile switch, transport change or
+disconnect, cancel every stream of every Inertia node. Nodes retain their own
+endpoint snapshot and use the existing mutex/generations. Workers and the input
+consumer also compare the selected endpoint at decay, admission and completion,
+so a delayed notification cannot keep an old tail alive. Initial/repeated
+notifications for the same endpoint preserve fresh motion; USB/NONE identity
+does not depend on unused BLE profile storage. Transition to IDLE or SLEEP also
+ends existing motion. ACTIVE/repeated activity notifications do not cancel a
+fresh manual run. Cancellation never reuses an owned queued/in-flight slot or
+waits for endpoint submission. A report already accepted by the input consumer
+may finish; new manual input can start a new run on the new endpoint.
+
+This lifecycle cleanup does not exclude internal tokens from core activity
+accounting. The selected Zephyr input dispatcher delivers every event to
+NULL-device callbacks, and the selected ZMK pointing activity callback submits
+activity work for every event, including these MSC tokens. Thus connected glide
+tokens, already queued retired tokens, and a new manual run started without a
+connected endpoint can still refresh activity. Excluding synthetic tokens from
+that accounting requires a core policy/filter. The module keeps input-thread
+HID serialization and does not mutate events or introduce a private dispatcher
+to hide them. No physical power or idle/sleep deadline improvement is claimed.
+
 ## DYA Studio settings
 
 Select `CONFIG_ZMK_INPUT_INERTIA_CUSTOM_SETTINGS=y` with [Custom Settings](https://github.com/cormoran/zmk-feature-custom-settings) and

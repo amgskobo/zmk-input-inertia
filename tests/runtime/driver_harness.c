@@ -10,26 +10,67 @@
 #include <string.h>
 #include <zmk-input-inertia/runtime.h>
 #include <zmk-input-inertia/inertia_core.h>
+#include "lifecycle_inputs.h"
 
 typedef long atomic_t;
 typedef long atomic_val_t;
 typedef int64_t k_ticks_t;
-typedef struct { int64_t ms; } k_timeout_t;
-struct k_mutex { int depth; };
-struct k_work { void (*handler)(struct k_work *work); };
+typedef struct {
+    int64_t ms;
+} k_timeout_t;
+struct k_mutex {
+    int depth;
+};
+struct k_work {
+    void (*handler)(struct k_work *work);
+};
 struct k_work_delayable {
     struct k_work work;
     bool scheduled;
     int64_t delay_ms;
     int64_t due_ms;
 };
-struct k_work_q { int unused; };
-struct device { const void *config; void *data; const char *name; const void *api; };
+struct k_work_q {
+    int unused;
+};
+struct device {
+    const void *config;
+    void *data;
+    const char *name;
+    const void *api;
+};
 static const int inertia_driver_api;
 static bool device_is_ready(const struct device *d) { return d->data != NULL; }
-struct input_event { const struct device *dev; uint8_t sync; uint16_t type; uint16_t code; int32_t value; };
-struct zmk_input_processor_state { uint8_t input_device_index; };
-struct keyboard_report { struct { uint8_t modifiers; } body; };
+static struct zmk_endpoint_instance selected_endpoint = {.transport = ZMK_TRANSPORT_USB};
+static struct zmk_endpoint_instance zmk_endpoint_get_selected(void) { return selected_endpoint; }
+static bool zmk_endpoint_instance_eq(struct zmk_endpoint_instance first,
+                                     struct zmk_endpoint_instance second) {
+    return first.transport == second.transport &&
+           (first.transport != ZMK_TRANSPORT_BLE ||
+            first.ble.profile_index == second.ble.profile_index);
+}
+static const struct zmk_endpoint_changed *as_zmk_endpoint_changed(const zmk_event_t *event) {
+    return event->type == TEST_EVENT_ENDPOINT ? &event->endpoint : NULL;
+}
+static const struct zmk_activity_state_changed *
+as_zmk_activity_state_changed(const zmk_event_t *event) {
+    return event->type == TEST_EVENT_ACTIVITY ? &event->activity : NULL;
+}
+struct input_event {
+    const struct device *dev;
+    uint8_t sync;
+    uint16_t type;
+    uint16_t code;
+    int32_t value;
+};
+struct zmk_input_processor_state {
+    uint8_t input_device_index;
+};
+struct keyboard_report {
+    struct {
+        uint8_t modifiers;
+    } body;
+};
 struct inertia_test_snapshot {
     int16_t velocity[INERTIA_AXIS_COUNT];
     int16_t ema[INERTIA_AXIS_COUNT];
@@ -124,14 +165,18 @@ static void zmk_hid_mouse_movement_set(int16_t x, int16_t y) {
     hid_move[0] = x;
     hid_move[1] = y;
     if ((x != 0 || y != 0) && during_hid_set != NULL) {
-        void (*hook)(void) = during_hid_set;during_hid_set = NULL;hook();
+        void (*hook)(void) = during_hid_set;
+        during_hid_set = NULL;
+        hook();
     }
 }
 static void zmk_hid_mouse_scroll_set(int16_t x, int16_t y) {
     hid_scroll[0] = x;
     hid_scroll[1] = y;
     if ((x != 0 || y != 0) && during_hid_set != NULL) {
-        void (*hook)(void) = during_hid_set;during_hid_set = NULL;hook();
+        void (*hook)(void) = during_hid_set;
+        during_hid_set = NULL;
+        hook();
     }
 }
 static int zmk_endpoint_send_mouse_report(void) {
@@ -144,14 +189,16 @@ static int zmk_endpoint_send_mouse_report(void) {
     sent_scroll[1] = hid_scroll[1];
     return endpoint_result;
 }
-static int input_report(const struct device *dev, uint8_t type, uint16_t code,
-                        int32_t value, bool sync, k_timeout_t timeout) {
+static int input_report(const struct device *dev, uint8_t type, uint16_t code, int32_t value,
+                        bool sync, k_timeout_t timeout) {
     assert(data.lock.depth == 1 && dev == data.dev && type == INPUT_EV_MSC && sync);
     assert(timeout.ms == 0);
-    if (input_result != 0) { return input_result; }
+    if (input_result != 0) {
+        return input_result;
+    }
     assert(input_count < sizeof(input_events) / sizeof(input_events[0]));
-    input_events[input_count++] = (struct input_event){.dev = dev, .type = type,
-        .code = code, .value = value, .sync = sync};
+    input_events[input_count++] =
+        (struct input_event){.dev = dev, .type = type, .code = code, .value = value, .sync = sync};
     return 0;
 }
 static void inertia_test_before_emit(const struct device *dev, size_t stream_index, bool scroll) {
@@ -208,14 +255,18 @@ static void wheel(struct zmk_input_processor_state *state, int32_t x, int32_t y)
 static void drain_reports(void) {
     while (input_count != 0) {
         struct input_event event = input_events[0];
-        for (size_t i = 1; i < input_count; i++) { input_events[i - 1] = input_events[i]; }
+        for (size_t i = 1; i < input_count; i++) {
+            input_events[i - 1] = input_events[i];
+        }
         input_count--;
         inertia_input_callback(&event, NULL);
     }
 }
 
 static void run_work(struct k_work_delayable *work) {
-    if (work->scheduled && work->due_ms > now_ms) { now_ms = work->due_ms; }
+    if (work->scheduled && work->due_ms > now_ms) {
+        now_ms = work->due_ms;
+    }
     work->scheduled = false;
     work->work.handler(&work->work);
 }
@@ -247,7 +298,9 @@ static void test_running_rearm(void) {
     expect_scroll = false;
     for (int inertial = 0; inertial < 2; inertial++) {
         move(NULL, 200, 0);
-        if (inertial) { run_move(0); }
+        if (inertial) {
+            run_move(0);
+        }
         const int before = sent_reports;
         before_decay = rearm_move;
         run_move(0); /* The old handler has started when manual input rearms it. */
@@ -265,7 +318,9 @@ static void test_running_rearm(void) {
     expect_scroll = true;
     for (int inertial = 0; inertial < 2; inertial++) {
         wheel(NULL, 0, 40);
-        if (inertial) { run_scroll(0); }
+        if (inertial) {
+            run_scroll(0);
+        }
         const int before = sent_reports;
         before_decay = rearm_scroll;
         run_scroll(0);
@@ -285,9 +340,7 @@ static void test_running_rearm(void) {
 }
 
 static void bump_move_generation(struct inertia_stream *s) { atomic_inc(&s->move.generation); }
-static void bump_scroll_generation(struct inertia_stream *s) {
-    atomic_inc(&s->scroll.generation);
-}
+static void bump_scroll_generation(struct inertia_stream *s) { atomic_inc(&s->scroll.generation); }
 static void stop_move(struct inertia_stream *s) { s->move.active = false; }
 static void settle_move(struct inertia_stream *s) { s->move.inertial = false; }
 static void stop_scroll(struct inertia_stream *s) { s->scroll.active = false; }
@@ -411,8 +464,7 @@ static void test_scroll_decay(void) {
     assert(!stream(0)->scroll.active && !stream(0)->scroll_work.scheduled);
     run_scroll(0);
 
-    void (*gaps[])(struct inertia_stream *) = {bump_scroll_generation, stop_scroll,
-                                               settle_scroll};
+    void (*gaps[])(struct inertia_stream *) = {bump_scroll_generation, stop_scroll, settle_scroll};
     for (size_t i = 0; i < sizeof(gaps) / sizeof(gaps[0]); i++) {
         wheel(NULL, 6, 0);
         const int before = sent_reports;
@@ -557,90 +609,113 @@ static void test_pending_reports(void) {
 
 static void test_runtime_params(void) {
     struct inertia_params original, out;
-    assert(inertia_get_params(&processor,&original)==0);
-    assert(inertia_set_params(&processor,&original)==0); /* canonical percent representation */
-    assert(inertia_get_params(&processor,NULL)==-EINVAL);
-    assert(inertia_get_params(NULL,&out)==-ENODEV);
-    assert(inertia_set_params(&processor,NULL)==-EINVAL);
-    assert(inertia_set_params(NULL,&original)==-ENODEV);
-    struct device bad=processor;bad.api=NULL;
-    assert(inertia_get_params(&bad,&out)==-ENODEV);
-    bad=processor;bad.data=NULL;
-    assert(inertia_set_params(&bad,&original)==-ENODEV);
-    struct { size_t offset; int32_t lo,hi; } bounds[]={
-        {offsetof(struct inertia_params,trigger_ms),1,65535},
-        {offsetof(struct inertia_params,move_decay_factor_int),0,99},
-        {offsetof(struct inertia_params,move_report_interval_ms),1,65535},
-        {offsetof(struct inertia_params,move_threshold_start),1,32767},
-        {offsetof(struct inertia_params,move_threshold_stop),0,32766},
-        {offsetof(struct inertia_params,scroll_decay_factor_int),0,99},
-        {offsetof(struct inertia_params,scroll_report_interval_ms),1,65535},
-        {offsetof(struct inertia_params,scroll_threshold_start),1,32767},
-        {offsetof(struct inertia_params,scroll_threshold_stop),0,32766},
+    assert(inertia_get_params(&processor, &original) == 0);
+    assert(inertia_set_params(&processor, &original) == 0); /* canonical percent representation */
+    assert(inertia_get_params(&processor, NULL) == -EINVAL);
+    assert(inertia_get_params(NULL, &out) == -ENODEV);
+    assert(inertia_set_params(&processor, NULL) == -EINVAL);
+    assert(inertia_set_params(NULL, &original) == -ENODEV);
+    struct device bad = processor;
+    bad.api = NULL;
+    assert(inertia_get_params(&bad, &out) == -ENODEV);
+    bad = processor;
+    bad.data = NULL;
+    assert(inertia_set_params(&bad, &original) == -ENODEV);
+    struct {
+        size_t offset;
+        int32_t lo, hi;
+    } bounds[] = {
+        {offsetof(struct inertia_params, trigger_ms), 1, 65535},
+        {offsetof(struct inertia_params, move_decay_factor_int), 0, 99},
+        {offsetof(struct inertia_params, move_report_interval_ms), 1, 65535},
+        {offsetof(struct inertia_params, move_threshold_start), 1, 32767},
+        {offsetof(struct inertia_params, move_threshold_stop), 0, 32766},
+        {offsetof(struct inertia_params, scroll_decay_factor_int), 0, 99},
+        {offsetof(struct inertia_params, scroll_report_interval_ms), 1, 65535},
+        {offsetof(struct inertia_params, scroll_threshold_start), 1, 32767},
+        {offsetof(struct inertia_params, scroll_threshold_stop), 0, 32766},
 
     };
-    for(size_t i=0;i<sizeof(bounds)/sizeof(bounds[0]);i++) {
-        struct inertia_params p=original;
-        int32_t *field=(int32_t *)((char *)&p+bounds[i].offset);
-        *field=bounds[i].lo-1;assert(inertia_set_params(&processor,&p)==-EINVAL);
-        *field=bounds[i].hi+1;assert(inertia_set_params(&processor,&p)==-EINVAL);
-        assert(inertia_get_params(&processor,&out)==0);
-        for(size_t j=0;j<sizeof(bounds)/sizeof(bounds[0]);j++) {
-            assert(*(int32_t *)((char *)&original+bounds[j].offset)==*(int32_t *)((char *)&out+bounds[j].offset));
+    for (size_t i = 0; i < sizeof(bounds) / sizeof(bounds[0]); i++) {
+        struct inertia_params p = original;
+        int32_t *field = (int32_t *)((char *)&p + bounds[i].offset);
+        *field = bounds[i].lo - 1;
+        assert(inertia_set_params(&processor, &p) == -EINVAL);
+        *field = bounds[i].hi + 1;
+        assert(inertia_set_params(&processor, &p) == -EINVAL);
+        assert(inertia_get_params(&processor, &out) == 0);
+        for (size_t j = 0; j < sizeof(bounds) / sizeof(bounds[0]); j++) {
+            assert(*(int32_t *)((char *)&original + bounds[j].offset) ==
+                   *(int32_t *)((char *)&out + bounds[j].offset));
         }
-        assert(original.cancel_scroll_inertia_on_ctrl==out.cancel_scroll_inertia_on_ctrl);
-        for(int upper=0;upper<2;upper++) {
-            p=original;*field=upper?bounds[i].hi:bounds[i].lo;
-            if(p.move_threshold_start<=p.move_threshold_stop) {
-                if(bounds[i].offset==offsetof(struct inertia_params,move_threshold_start))p.move_threshold_stop=0;
-                else p.move_threshold_start=32767;
+        assert(original.cancel_scroll_inertia_on_ctrl == out.cancel_scroll_inertia_on_ctrl);
+        for (int upper = 0; upper < 2; upper++) {
+            p = original;
+            *field = upper ? bounds[i].hi : bounds[i].lo;
+            if (p.move_threshold_start <= p.move_threshold_stop) {
+                if (bounds[i].offset == offsetof(struct inertia_params, move_threshold_start))
+                    p.move_threshold_stop = 0;
+                else
+                    p.move_threshold_start = 32767;
             }
-            if(p.scroll_threshold_start<=p.scroll_threshold_stop) {
-                if(bounds[i].offset==offsetof(struct inertia_params,scroll_threshold_start))p.scroll_threshold_stop=0;
-                else p.scroll_threshold_start=32767;
+            if (p.scroll_threshold_start <= p.scroll_threshold_stop) {
+                if (bounds[i].offset == offsetof(struct inertia_params, scroll_threshold_start))
+                    p.scroll_threshold_stop = 0;
+                else
+                    p.scroll_threshold_start = 32767;
             }
-            assert(inertia_set_params(&processor,&p)==0);
-            assert(inertia_set_params(&processor,&original)==0);
+            assert(inertia_set_params(&processor, &p) == 0);
+            assert(inertia_set_params(&processor, &original) == 0);
         }
     }
-    struct inertia_params stop_only=original; stop_only.scroll_threshold_stop=1;
-    assert(inertia_set_params(&processor,&stop_only)==0);
-    assert(inertia_set_params(&processor,&original)==0);
-    struct inertia_params invalid=original;
-    invalid.move_threshold_stop=invalid.move_threshold_start;
-    assert(inertia_set_params(&processor,&invalid)==-EINVAL);
-    invalid=original;invalid.scroll_threshold_stop=invalid.scroll_threshold_start;
-    assert(inertia_set_params(&processor,&invalid)==-EINVAL);
+    struct inertia_params stop_only = original;
+    stop_only.scroll_threshold_stop = 1;
+    assert(inertia_set_params(&processor, &stop_only) == 0);
+    assert(inertia_set_params(&processor, &original) == 0);
+    struct inertia_params invalid = original;
+    invalid.move_threshold_stop = invalid.move_threshold_start;
+    assert(inertia_set_params(&processor, &invalid) == -EINVAL);
+    invalid = original;
+    invalid.scroll_threshold_stop = invalid.scroll_threshold_start;
+    assert(inertia_set_params(&processor, &invalid) == -EINVAL);
     /* Every percentage round trips exactly through internal Q8. */
-    for(int percentage=0;percentage<100;percentage++) {
-        struct inertia_params p=original;
-        p.move_decay_factor_int=percentage;p.scroll_decay_factor_int=percentage;
-        assert(inertia_set_params(&processor,&p)==0);
-        assert(inertia_get_params(&processor,&out)==0);
-        assert(out.move_decay_factor_int==percentage && out.scroll_decay_factor_int==percentage);
+    for (int percentage = 0; percentage < 100; percentage++) {
+        struct inertia_params p = original;
+        p.move_decay_factor_int = percentage;
+        p.scroll_decay_factor_int = percentage;
+        assert(inertia_set_params(&processor, &p) == 0);
+        assert(inertia_get_params(&processor, &out) == 0);
+        assert(out.move_decay_factor_int == percentage &&
+               out.scroll_decay_factor_int == percentage);
     }
-    assert(inertia_set_params(&processor,&original)==0);
-    expect_scroll=false;move(NULL,200,0);
-    uint32_t generation=stream(0)->move.generation;
-    assert(inertia_set_params(&processor,&original)==0);
-    assert(stream(0)->move.active && stream(0)->move.generation==generation);
+    assert(inertia_set_params(&processor, &original) == 0);
+    expect_scroll = false;
+    move(NULL, 200, 0);
+    uint32_t generation = stream(0)->move.generation;
+    assert(inertia_set_params(&processor, &original) == 0);
+    assert(stream(0)->move.active && stream(0)->move.generation == generation);
     run_work(&stream(0)->move_work);
-    assert(input_count==1 && stream(0)->move_report.queued);
-    const int reports_before=sent_reports;
-    struct inertia_params changed=original;changed.cancel_scroll_inertia_on_ctrl=!original.cancel_scroll_inertia_on_ctrl;
-    assert(inertia_set_params(&processor,&changed)==0);
-    assert(!stream(0)->move.active && stream(0)->move_report.queued && "settings invalidate queued inertia");
-    drain_reports();assert(sent_reports==reports_before && !stream(0)->move_report.queued);
-    for(size_t i=0;i<INERTIA_STREAM_COUNT;i++) {
+    assert(input_count == 1 && stream(0)->move_report.queued);
+    const int reports_before = sent_reports;
+    struct inertia_params changed = original;
+    changed.cancel_scroll_inertia_on_ctrl = !original.cancel_scroll_inertia_on_ctrl;
+    assert(inertia_set_params(&processor, &changed) == 0);
+    assert(!stream(0)->move.active && stream(0)->move_report.queued &&
+           "settings invalidate queued inertia");
+    drain_reports();
+    assert(sent_reports == reports_before && !stream(0)->move_report.queued);
+    for (size_t i = 0; i < INERTIA_STREAM_COUNT; i++) {
         assert(!stream(i)->move.active && !stream(i)->scroll.active);
         assert(!stream(i)->move_work.scheduled && !stream(i)->scroll_work.scheduled);
     }
     struct inertia_data other_data;
-    struct device other={.data=&other_data,.config=&config,.api=&inertia_driver_api};
-    assert(inertia_init(&other)==0);
-    assert(inertia_get_params(&other,&out)==0 && out.cancel_scroll_inertia_on_ctrl==config.cancel_scroll_inertia_on_ctrl);
-    assert(inertia_init(&processor)==0);
-    puts("inertia runtime params: bounds, coupled thresholds, all100 percentages, no-op, cancellation and queued tokens PASS");
+    struct device other = {.data = &other_data, .config = &config, .api = &inertia_driver_api};
+    assert(inertia_init(&other) == 0);
+    assert(inertia_get_params(&other, &out) == 0 &&
+           out.cancel_scroll_inertia_on_ctrl == config.cancel_scroll_inertia_on_ctrl);
+    assert(inertia_init(&processor) == 0);
+    puts("inertia runtime params: bounds, coupled thresholds, all100 percentages, no-op, "
+         "cancellation and queued tokens PASS");
 }
 
 static void test_auxiliary_zero_frames(void) {
@@ -703,11 +778,16 @@ static void test_delayed_consumer_period(void) {
         for (int sign = -1; sign <= 1; sign += 2) {
             assert(inertia_init(&processor) == 0);
             expect_scroll = scroll != 0;
-            struct k_work_delayable *work = scroll ? &stream(0)->scroll_work : &stream(0)->move_work;
-            const uint16_t period = scroll ? data.config.scroll_interval_ms : data.config.move_interval_ms;
+            struct k_work_delayable *work =
+                scroll ? &stream(0)->scroll_work : &stream(0)->move_work;
+            const uint16_t period =
+                scroll ? data.config.scroll_interval_ms : data.config.move_interval_ms;
             const int before = sent_reports;
-            if (scroll) { wheel(NULL, 0, sign * 40); }
-            else { move(NULL, sign * 200, 0); }
+            if (scroll) {
+                wheel(NULL, 0, sign * 40);
+            } else {
+                move(NULL, sign * 200, 0);
+            }
             run_work(work);
             assert(input_count == 1 && sent_reports == before);
             now_ms += period - 1; /* Consumer resumes just before the former periodic deadline. */
@@ -719,8 +799,11 @@ static void test_delayed_consumer_period(void) {
             assert(sent_reports == before + 2);
             assert(sent_at_ms - first >= period && "delayed consumer compressed inertia interval");
             assert(scroll ? sent_scroll[1] == sign * 12 : sent_move[0] == sign * 81);
-            if (scroll) { wheel(NULL, 0, 0); }
-            else { move(NULL, 0, 0); }
+            if (scroll) {
+                wheel(NULL, 0, 0);
+            } else {
+                move(NULL, 0, 0);
+            }
         }
     }
     expect_scroll = false;
@@ -729,123 +812,185 @@ static void test_delayed_consumer_period(void) {
 }
 
 static void pause_hid_past_period(void) {
-    uint16_t period=expect_scroll?data.config.scroll_interval_ms:data.config.move_interval_ms;
+    uint16_t period = expect_scroll ? data.config.scroll_interval_ms : data.config.move_interval_ms;
     now_ms += period + 5;
-    run_work(expect_scroll?&stream(0)->scroll_work:&stream(0)->move_work);
+    run_work(expect_scroll ? &stream(0)->scroll_work : &stream(0)->move_work);
 }
 
 static void test_hid_handoff_period(void) {
-    for (size_t scroll=0;scroll<2;scroll++) {
-        assert(inertia_init(&processor)==0);
-        expect_scroll=scroll!=0;
-        uint16_t period=scroll?data.config.scroll_interval_ms:data.config.move_interval_ms;
-        const int before=sent_reports;
-        during_hid_set=pause_hid_past_period;
-        if(scroll) {wheel(NULL,0,40);run_scroll(0);}
-        else {move(NULL,200,0);run_move(0);}
-        assert(sent_reports==before+1 && "HID handoff compressed inertia interval");
-        int64_t first=sent_at_ms;
-        if(scroll) {run_scroll(0);} else {run_move(0);}
-        assert(sent_reports==before+2 && sent_at_ms-first>=period);
-        if(scroll) {wheel(NULL,0,0);} else {move(NULL,0,0);}
+    for (size_t scroll = 0; scroll < 2; scroll++) {
+        assert(inertia_init(&processor) == 0);
+        expect_scroll = scroll != 0;
+        uint16_t period = scroll ? data.config.scroll_interval_ms : data.config.move_interval_ms;
+        const int before = sent_reports;
+        during_hid_set = pause_hid_past_period;
+        if (scroll) {
+            wheel(NULL, 0, 40);
+            run_scroll(0);
+        } else {
+            move(NULL, 200, 0);
+            run_move(0);
+        }
+        assert(sent_reports == before + 1 && "HID handoff compressed inertia interval");
+        int64_t first = sent_at_ms;
+        if (scroll) {
+            run_scroll(0);
+        } else {
+            run_move(0);
+        }
+        assert(sent_reports == before + 2 && sent_at_ms - first >= period);
+        if (scroll) {
+            wheel(NULL, 0, 0);
+        } else {
+            move(NULL, 0, 0);
+        }
     }
-    expect_scroll=false;
-    assert(inertia_init(&processor)==0);
+    expect_scroll = false;
+    assert(inertia_init(&processor) == 0);
 }
 
 static bool expire_rearm;
 static void restart_owned_slot(void) {
-    if(expect_scroll) {wheel(NULL,0,16);} else {move(NULL,80,0);}
-    rearmed_at_ms=now_ms;
-    if(expire_rearm) {
-        now_ms+=data.config.trigger_ms+5;
-        run_work(expect_scroll?&stream(0)->scroll_work:&stream(0)->move_work);
+    if (expect_scroll) {
+        wheel(NULL, 0, 16);
+    } else {
+        move(NULL, 80, 0);
+    }
+    rearmed_at_ms = now_ms;
+    if (expire_rearm) {
+        now_ms += data.config.trigger_ms + 5;
+        run_work(expect_scroll ? &stream(0)->scroll_work : &stream(0)->move_work);
     }
 }
 
 static void restart_before_emit(struct inertia_stream *s) {
-    assert(s==stream(0));restart_owned_slot();
+    assert(s == stream(0));
+    restart_owned_slot();
 }
 
 static void test_owned_slot_rearm(void) {
-    for(size_t scroll=0;scroll<2;scroll++) {
-        for(size_t committed=0;committed<2;committed++) {
-            for(size_t expired=0;expired<2;expired++) {
-                assert(inertia_init(&processor)==0);
-                expect_scroll=scroll!=0;expire_rearm=expired!=0;
-                const int before=sent_reports;
-                if(committed) {during_hid_set=restart_owned_slot;}
-                else {before_emit=restart_before_emit;}
-                if(scroll) {wheel(NULL,0,40);run_scroll(0);}
-                else {move(NULL,200,0);run_move(0);}
-                assert(sent_reports==before+(int)committed);
-                struct k_work_delayable *work=scroll?&stream(0)->scroll_work:&stream(0)->move_work;
-                const int64_t due=expired?now_ms:rearmed_at_ms+data.config.trigger_ms;
-                assert(work->scheduled && work->due_ms==due && "owned slot lost or overwrote new trigger");
-                assert(!(scroll?stream(0)->scroll_report.queued:stream(0)->move_report.queued));
-                if(scroll) {run_scroll(0);} else {run_move(0);}
-                assert(sent_reports==before+(int)committed+1 && sent_at_ms==due);
-                assert(scroll?sent_scroll[1]==6:sent_move[0]==36);
-                if(scroll) {wheel(NULL,0,0);} else {move(NULL,0,0);}
+    for (size_t scroll = 0; scroll < 2; scroll++) {
+        for (size_t committed = 0; committed < 2; committed++) {
+            for (size_t expired = 0; expired < 2; expired++) {
+                assert(inertia_init(&processor) == 0);
+                expect_scroll = scroll != 0;
+                expire_rearm = expired != 0;
+                const int before = sent_reports;
+                if (committed) {
+                    during_hid_set = restart_owned_slot;
+                } else {
+                    before_emit = restart_before_emit;
+                }
+                if (scroll) {
+                    wheel(NULL, 0, 40);
+                    run_scroll(0);
+                } else {
+                    move(NULL, 200, 0);
+                    run_move(0);
+                }
+                assert(sent_reports == before + (int)committed);
+                struct k_work_delayable *work =
+                    scroll ? &stream(0)->scroll_work : &stream(0)->move_work;
+                const int64_t due = expired ? now_ms : rearmed_at_ms + data.config.trigger_ms;
+                assert(work->scheduled && work->due_ms == due &&
+                       "owned slot lost or overwrote new trigger");
+                assert(!(scroll ? stream(0)->scroll_report.queued : stream(0)->move_report.queued));
+                if (scroll) {
+                    run_scroll(0);
+                } else {
+                    run_move(0);
+                }
+                assert(sent_reports == before + (int)committed + 1 && sent_at_ms == due);
+                assert(scroll ? sent_scroll[1] == 6 : sent_move[0] == 36);
+                if (scroll) {
+                    wheel(NULL, 0, 0);
+                } else {
+                    move(NULL, 0, 0);
+                }
             }
         }
     }
-    expect_scroll=false;
-    assert(inertia_init(&processor)==0);
-    puts("inertia owned slots: queued/in-flight cancellation preserves future and expired triggers PASS");
+    expect_scroll = false;
+    assert(inertia_init(&processor) == 0);
+    puts("inertia owned slots: queued/in-flight cancellation preserves future and expired triggers "
+         "PASS");
 }
 
 static void test_composite_permutations(void) {
-    const uint16_t codes[2][4]={{INPUT_REL_X,INPUT_REL_Y,INPUT_REL_HWHEEL,INPUT_REL_WHEEL},
-                                {INPUT_REL_HWHEEL,INPUT_REL_WHEEL,INPUT_REL_X,INPUT_REL_Y}};
-    unsigned cases=0;
-    for(size_t kind=0;kind<2;kind++) {
-        for(size_t ctrl=0;ctrl<2;ctrl++) {
-          for(size_t history=0;history<3;history++) {
-            for(int sign=-1;sign<=1;sign+=2) {
-                for(size_t a=0;a<4;a++) for(size_t b=0;b<4;b++) {
-                    if(b==a)continue;
-                    for(size_t c=0;c<4;c++) {
-                        if(c==a||c==b)continue;
-                        size_t order[4]={a,b,c,6-a-b-c};
-                        assert(inertia_init(&processor)==0);
-                        data.config.cancel_scroll_inertia_on_ctrl=true;
-                        const int32_t values[4]={sign*(kind?12:200),sign*(kind?20:80),0,0};
-                        keyboard.body.modifiers=0;expect_scroll=kind!=0;
-                        if(history) {
-                            if(kind) {wheel(NULL,values[0],values[1]);if(history==2)run_scroll(0);}
-                            else {move(NULL,values[0],values[1]);if(history==2)run_move(0);}
+    const uint16_t codes[2][4] = {{INPUT_REL_X, INPUT_REL_Y, INPUT_REL_HWHEEL, INPUT_REL_WHEEL},
+                                  {INPUT_REL_HWHEEL, INPUT_REL_WHEEL, INPUT_REL_X, INPUT_REL_Y}};
+    unsigned cases = 0;
+    for (size_t kind = 0; kind < 2; kind++) {
+        for (size_t ctrl = 0; ctrl < 2; ctrl++) {
+            for (size_t history = 0; history < 3; history++) {
+                for (int sign = -1; sign <= 1; sign += 2) {
+                    for (size_t a = 0; a < 4; a++)
+                        for (size_t b = 0; b < 4; b++) {
+                            if (b == a)
+                                continue;
+                            for (size_t c = 0; c < 4; c++) {
+                                if (c == a || c == b)
+                                    continue;
+                                size_t order[4] = {a, b, c, 6 - a - b - c};
+                                assert(inertia_init(&processor) == 0);
+                                data.config.cancel_scroll_inertia_on_ctrl = true;
+                                const int32_t values[4] = {sign * (kind ? 12 : 200),
+                                                           sign * (kind ? 20 : 80), 0, 0};
+                                keyboard.body.modifiers = 0;
+                                expect_scroll = kind != 0;
+                                if (history) {
+                                    if (kind) {
+                                        wheel(NULL, values[0], values[1]);
+                                        if (history == 2)
+                                            run_scroll(0);
+                                    } else {
+                                        move(NULL, values[0], values[1]);
+                                        if (history == 2)
+                                            run_move(0);
+                                    }
+                                }
+                                keyboard.body.modifiers = ctrl ? MOD_RCTL : 0;
+                                for (size_t i = 0; i < 4; i++)
+                                    send_to(NULL, INPUT_EV_REL, codes[kind][order[i]],
+                                            values[order[i]], i == 3);
+                                struct inertia_motion_state *primary =
+                                    kind ? &stream(0)->scroll : &stream(0)->move;
+                                struct inertia_motion_state *other =
+                                    kind ? &stream(0)->move : &stream(0)->scroll;
+                                assert(!primary->frame.open && !other->frame.open &&
+                                       !other->active);
+                                if (kind && ctrl) {
+                                    assert(!primary->active);
+                                } else {
+                                    assert(primary->active && primary->velocity[0] == values[0] &&
+                                           primary->velocity[1] == values[1]);
+                                    int32_t expected_x =
+                                        history == 1 ? values[0] * 3 / 4 : values[0] / 2;
+                                    int32_t expected_y =
+                                        history == 1 ? values[1] * 3 / 4 : values[1] / 2;
+                                    assert(primary->ema[0] == expected_x &&
+                                           primary->ema[1] == expected_y &&
+                                           "leading auxiliary zero erased manual history");
+                                }
+                                cases++;
+                            }
                         }
-                        keyboard.body.modifiers=ctrl?MOD_RCTL:0;
-                        for(size_t i=0;i<4;i++)send_to(NULL,INPUT_EV_REL,codes[kind][order[i]],values[order[i]],i==3);
-                        struct inertia_motion_state *primary=kind?&stream(0)->scroll:&stream(0)->move;
-                        struct inertia_motion_state *other=kind?&stream(0)->move:&stream(0)->scroll;
-                        assert(!primary->frame.open && !other->frame.open && !other->active);
-                        if(kind&&ctrl) {assert(!primary->active);}
-                        else {
-                            assert(primary->active && primary->velocity[0]==values[0] && primary->velocity[1]==values[1]);
-                            int32_t expected_x=history==1?values[0]*3/4:values[0]/2;
-                            int32_t expected_y=history==1?values[1]*3/4:values[1]/2;
-                            assert(primary->ema[0]==expected_x && primary->ema[1]==expected_y && "leading auxiliary zero erased manual history");
-                        }
-                        cases++;
-                    }
                 }
             }
-          }
         }
     }
-    assert(cases==576);
-    keyboard.body.modifiers=0;
-    assert(inertia_init(&processor)==0);
-    send_to(NULL,INPUT_EV_REL,INPUT_REL_X,200,false);
-    send_to(&second,INPUT_EV_REL,INPUT_REL_WHEEL,0,false);
+    assert(cases == 576);
+    keyboard.body.modifiers = 0;
+    assert(inertia_init(&processor) == 0);
+    send_to(NULL, INPUT_EV_REL, INPUT_REL_X, 200, false);
+    send_to(&second, INPUT_EV_REL, INPUT_REL_WHEEL, 0, false);
     assert(!stream(0)->move.frame.open && !stream(0)->move.active);
-    send_to(NULL,INPUT_EV_REL,INPUT_REL_Y,80,true);
-    assert(stream(0)->move.velocity[0]==0 && stream(0)->move.velocity[1]==80);
-    assert(inertia_init(&processor)==0);
-    expect_scroll=false;
-    puts("inertia composite permutations: all24 axis orders x2 kinds x2 signs x2 Ctrl x3 histories PASS cases=576");
+    send_to(NULL, INPUT_EV_REL, INPUT_REL_Y, 80, true);
+    assert(stream(0)->move.velocity[0] == 0 && stream(0)->move.velocity[1] == 80);
+    assert(inertia_init(&processor) == 0);
+    expect_scroll = false;
+    puts("inertia composite permutations: all24 axis orders x2 kinds x2 signs x2 Ctrl x3 histories "
+         "PASS cases=576");
 }
 
 static void test_failure_recovery_traces(void) {
@@ -866,14 +1011,18 @@ static void test_failure_recovery_traces(void) {
                 params.move_threshold_start = params.scroll_threshold_start = 1;
                 params.move_threshold_stop = params.scroll_threshold_stop = 0;
                 assert(inertia_set_params(&processor, &params) == 0);
-                const int64_t period = scroll ? params.scroll_report_interval_ms
-                                              : params.move_report_interval_ms;
+                const int64_t period =
+                    scroll ? params.scroll_report_interval_ms : params.move_report_interval_ms;
                 struct inertia_stream *s = stream(0);
                 struct inertia_motion_state *motion = scroll ? &s->scroll : &s->move;
-                struct inertia_pending_report *pending = scroll ? &s->scroll_report : &s->move_report;
+                struct inertia_pending_report *pending =
+                    scroll ? &s->scroll_report : &s->move_report;
                 struct k_work_delayable *work = scroll ? &s->scroll_work : &s->move_work;
-                if (scroll) { wheel(NULL, sign * 128, -sign * 64); }
-                else { move(NULL, sign * 128, -sign * 64); }
+                if (scroll) {
+                    wheel(NULL, sign * 128, -sign * 64);
+                } else {
+                    move(NULL, sign * 128, -sign * 64);
+                }
                 int64_t due = now_ms + params.trigger_ms;
                 const int before = sent_reports;
                 int attempts = 0, total_x = 0, total_y = 0, delivered_x = 0, delivered_y = 0;
@@ -887,10 +1036,12 @@ static void test_failure_recovery_traces(void) {
                     assert(now_ms == due);
                     assert(motion->velocity[0] == sign * trace[i][0]);
                     assert(motion->velocity[1] == sign * trace[i][1]);
-                    total_x += motion->velocity[0]; total_y += motion->velocity[1];
+                    total_x += motion->velocity[0];
+                    total_y += motion->velocity[1];
                     if (input_result != 0) {
                         assert(input_count == 0 && !pending->queued);
-                        printf("TRACE recovery kind=%s sign=%d faults=%zu step=%zu tick=%lld queued=0 x=%d y=%d input_rc=%d\n",
+                        printf("TRACE recovery kind=%s sign=%d faults=%zu step=%zu tick=%lld "
+                               "queued=0 x=%d y=%d input_rc=%d\n",
                                scroll ? "scroll" : "move", sign, faults, i, (long long)now_ms,
                                motion->velocity[0], motion->velocity[1], input_result);
                         due += period;
@@ -909,16 +1060,22 @@ static void test_failure_recovery_traces(void) {
                         assert((uint32_t)motion->generation == generation && pending->queued);
                     }
                     endpoint_result = faults && i < 4 ? -EIO : 0;
-                    drain_reports(); attempts++;
+                    drain_reports();
+                    attempts++;
                     assert(sent_reports == before + attempts && sent_at_ms == now_ms);
                     const int16_t *sent = scroll ? sent_scroll : sent_move;
                     const int16_t *other = scroll ? sent_move : sent_scroll;
                     assert(sent[0] == sign * trace[i][0] && sent[1] == sign * trace[i][1]);
                     assert(other[0] == 0 && other[1] == 0);
-                    assert(hid_move[0] == 0 && hid_move[1] == 0 && hid_scroll[0] == 0 && hid_scroll[1] == 0);
+                    assert(hid_move[0] == 0 && hid_move[1] == 0 && hid_scroll[0] == 0 &&
+                           hid_scroll[1] == 0);
                     assert(!pending->queued && work->scheduled);
-                    if (endpoint_result == 0) { delivered_x += sent[0]; delivered_y += sent[1]; }
-                    printf("TRACE recovery kind=%s sign=%d faults=%zu step=%zu tick=%lld queued=1 x=%d y=%d endpoint_rc=%d\n",
+                    if (endpoint_result == 0) {
+                        delivered_x += sent[0];
+                        delivered_y += sent[1];
+                    }
+                    printf("TRACE recovery kind=%s sign=%d faults=%zu step=%zu tick=%lld queued=1 "
+                           "x=%d y=%d endpoint_rc=%d\n",
                            scroll ? "scroll" : "move", sign, faults, i, (long long)sent_at_ms,
                            sent[0], sent[1], endpoint_result);
                     due = now_ms + period;
@@ -932,13 +1089,16 @@ static void test_failure_recovery_traces(void) {
                 now_ms = due - 1;
                 work->work.handler(&work->work);
                 assert(motion->active && sent_reports == before + attempts);
-                run_work(work); drain_reports();
+                run_work(work);
+                drain_reports();
                 assert(now_ms == due && !motion_has_state(motion) && !pending->queued);
                 assert(!work->scheduled && sent_reports == before + attempts);
                 now_ms += 1000;
-                run_work(work); drain_reports();
+                run_work(work);
+                drain_reports();
                 assert(sent_reports == before + attempts);
-                printf("TRACE recovery kind=%s sign=%d faults=%zu attempts=%d total=%d,%d delivered=%d,%d stop=%lld\n",
+                printf("TRACE recovery kind=%s sign=%d faults=%zu attempts=%d total=%d,%d "
+                       "delivered=%d,%d stop=%lld\n",
                        scroll ? "scroll" : "move", sign, faults, attempts, total_x, total_y,
                        delivered_x, delivered_y, (long long)due);
                 cases++;
@@ -948,16 +1108,182 @@ static void test_failure_recovery_traces(void) {
     assert(cases == 8);
     expect_scroll = false;
     assert(inertia_init(&processor) == 0);
-    puts("inertia recovery traces: exact axes/ticks/totals, two queue refusals, two endpoint failures, no-op/invalid writes and stop PASS cases=8");
+    puts("inertia recovery traces: exact axes/ticks/totals, two queue refusals, two endpoint "
+         "failures, no-op/invalid writes and stop PASS cases=8");
+}
+
+static void endpoint_event(void) {
+    zmk_event_t event = {.type = TEST_EVENT_ENDPOINT, .endpoint = {.endpoint = selected_endpoint}};
+    assert(inertia_lifecycle_event(&processor, &event) == ZMK_EV_EVENT_BUBBLE);
+}
+
+static void activity_event(enum zmk_activity_state state) {
+    zmk_event_t event = {.type = TEST_EVENT_ACTIVITY, .activity = {.state = state}};
+    assert(inertia_lifecycle_event(&processor, &event) == ZMK_EV_EVENT_BUBBLE);
+}
+
+static void switch_during_send(void) {
+    selected_endpoint =
+        (struct zmk_endpoint_instance){.transport = ZMK_TRANSPORT_BLE, .ble.profile_index = 2};
+}
+
+static void test_lifecycle(void) {
+    struct device not_ready = {.data = NULL};
+    zmk_event_t unknown = {.type = TEST_EVENT_OTHER};
+    assert(inertia_lifecycle_event(&not_ready, &unknown) == ZMK_EV_EVENT_BUBBLE);
+    for (unsigned scroll = 0; scroll < 2; scroll++) {
+        selected_endpoint = (struct zmk_endpoint_instance){.transport = ZMK_TRANSPORT_USB};
+        assert(inertia_init(&processor) == 0);
+        expect_scroll = scroll;
+        if (scroll)
+            wheel(NULL, 0, 40);
+        else
+            move(NULL, 200, 0);
+        struct inertia_motion_state *motion = scroll ? &stream(0)->scroll : &stream(0)->move;
+        struct inertia_pending_report *pending =
+            scroll ? &stream(0)->scroll_report : &stream(0)->move_report;
+        struct k_work_delayable *work = scroll ? &stream(0)->scroll_work : &stream(0)->move_work;
+        uint32_t generation = (uint32_t)motion->generation;
+        endpoint_event();
+        activity_event(ZMK_ACTIVITY_ACTIVE);
+        assert(inertia_lifecycle_event(&processor, &unknown) == ZMK_EV_EVENT_BUBBLE);
+        assert((uint32_t)motion->generation == generation && motion->active);
+        run_work(work); /* Keep the actual complete-frame token queued. */
+        assert(pending->queued && input_count == 1);
+        selected_endpoint =
+            (struct zmk_endpoint_instance){.transport = ZMK_TRANSPORT_BLE, .ble.profile_index = 0};
+        const int before = sent_reports;
+        endpoint_event();
+        assert(!motion_has_state(motion) && !work->scheduled && pending->queued);
+        assert((uint32_t)motion->generation == generation + 1);
+        for (size_t i = 0; i < INERTIA_STREAM_COUNT; i++) {
+            assert(!motion_has_state(&stream(i)->move) && !motion_has_state(&stream(i)->scroll));
+        }
+        drain_reports();
+        assert(sent_reports == before && !pending->queued && !input_count &&
+               "endpoint change admitted an old token");
+
+        if (scroll)
+            wheel(NULL, 0, 40);
+        else
+            move(NULL, 200, 0);
+        generation = (uint32_t)motion->generation;
+        endpoint_event();
+        assert((uint32_t)motion->generation == generation && motion->active);
+        selected_endpoint.ble.profile_index = 1; /* Same transport, different peer. */
+        endpoint_event();
+        assert((uint32_t)motion->generation == generation + 1 && !motion->active);
+        if (scroll)
+            wheel(NULL, 0, 40);
+        else
+            move(NULL, 200, 0);
+        selected_endpoint = (struct zmk_endpoint_instance){.transport = ZMK_TRANSPORT_NONE};
+        endpoint_event();
+        run_work(work);
+        drain_reports();
+        assert(sent_reports == before && !motion->active);
+
+        /* Catch target changes at decay/admission/completion even when the
+         * endpoint notification has not reached this node yet. */
+        for (unsigned phase = 0; phase < 3; phase++) {
+            selected_endpoint = (struct zmk_endpoint_instance){.transport = ZMK_TRANSPORT_USB};
+            assert(inertia_init(&processor) == 0);
+            if (scroll)
+                wheel(NULL, 0, 40);
+            else
+                move(NULL, 200, 0);
+            int accepted = sent_reports;
+            if (phase == 0) {
+                selected_endpoint = (struct zmk_endpoint_instance){.transport = ZMK_TRANSPORT_BLE};
+                run_work(work);
+                drain_reports();
+            } else {
+                run_work(work);
+                assert(pending->queued);
+                if (phase == 1) {
+                    selected_endpoint =
+                        (struct zmk_endpoint_instance){.transport = ZMK_TRANSPORT_BLE};
+                } else {
+                    during_hid_set = switch_during_send;
+                    accepted++; /* The input consumer has already accepted this report. */
+                }
+                drain_reports();
+            }
+            assert(sent_reports == accepted && !motion->active && !pending->queued &&
+                   !work->scheduled && "endpoint lifecycle left a future glide active");
+        }
+
+        for (unsigned state = ZMK_ACTIVITY_IDLE; state <= ZMK_ACTIVITY_SLEEP; state++) {
+            selected_endpoint = (struct zmk_endpoint_instance){.transport = ZMK_TRANSPORT_USB};
+            assert(inertia_init(&processor) == 0);
+            if (scroll)
+                wheel(NULL, 0, 40);
+            else
+                move(NULL, 200, 0);
+            run_work(work);
+            const int accepted = sent_reports;
+            generation = (uint32_t)motion->generation;
+            activity_event(state);
+            assert((uint32_t)motion->generation == generation + 1 && !motion->active &&
+                   pending->queued);
+            activity_event(state);
+            assert((uint32_t)motion->generation == generation + 1); /* Repeat event is a no-op. */
+            drain_reports();
+            assert(sent_reports == accepted && !pending->queued);
+            activity_event(ZMK_ACTIVITY_ACTIVE);
+            if (scroll)
+                wheel(NULL, 0, 40);
+            else
+                move(NULL, 200, 0);
+            run_work(work);
+            drain_reports();
+            assert(sent_reports == accepted + 1); /* A new manual frame can start a new run. */
+            if (scroll)
+                wheel(NULL, 0, 0);
+            else
+                move(NULL, 0, 0);
+        }
+    }
+    selected_endpoint = (struct zmk_endpoint_instance){.transport = ZMK_TRANSPORT_USB};
+    assert(inertia_init(&processor) == 0);
+    struct inertia_data other = {0};
+    struct device other_device = {.config = &config, .data = &other, .api = &inertia_driver_api};
+    assert(inertia_init(&other_device) == 0);
+    struct input_event event = {
+        .type = INPUT_EV_REL, .code = INPUT_REL_X, .value = 200, .sync = true};
+    assert(inertia_handle_event(&processor, &event, 0, 0, NULL) == ZMK_INPUT_PROC_CONTINUE);
+    assert(inertia_handle_event(&other_device, &event, 0, 0, &second) == ZMK_INPUT_PROC_CONTINUE);
+    selected_endpoint.ble.profile_index = 1;
+    selected_endpoint.transport = ZMK_TRANSPORT_BLE;
+    zmk_event_t change = {.type = TEST_EVENT_ENDPOINT, .endpoint = {.endpoint = selected_endpoint}};
+    endpoint_event();
+    assert(other.streams[1].move.active); /* Per-device callback owns only its node. */
+    assert(inertia_lifecycle_event(&other_device, &change) == ZMK_EV_EVENT_BUBBLE);
+    assert(!other.streams[1].move.active && !stream(0)->move.active);
+    /* Refresh before a fresh manual frame: it belongs to the new endpoint. */
+    selected_endpoint = (struct zmk_endpoint_instance){.transport = ZMK_TRANSPORT_USB};
+    move(NULL, 200, 0);
+    assert(data.endpoint.transport == ZMK_TRANSPORT_USB && stream(0)->move.active);
+    move(NULL, 0, 0);
+    expect_scroll = false;
+    assert(inertia_init(&processor) == 0);
+    puts("inertia lifecycle: endpoint identity/no-op/disconnect, queued/accepted reports, activity "
+         "and every node PASS");
 }
 
 int main(void) {
     assert(inertia_test_timeout_ticks(35, CONFIG_SYS_CLOCK_TICKS_PER_SEC) == 35);
-    config = (struct inertia_config){
-        .move_decay_factor_q8 = 230, .move_interval_ms = 10, .move_threshold_start = 15,
-        .move_threshold_stop = 2, .scroll_decay_factor_q8 = 200, .scroll_interval_ms = 20,
-        .scroll_threshold_start = 2, .scroll_threshold_stop = 0, .trigger_ms = 30};
-    processor = (struct device){.config = &config, .data = &data, .name = "inertia", .api = &inertia_driver_api};
+    config = (struct inertia_config){.move_decay_factor_q8 = 230,
+                                     .move_interval_ms = 10,
+                                     .move_threshold_start = 15,
+                                     .move_threshold_stop = 2,
+                                     .scroll_decay_factor_q8 = 200,
+                                     .scroll_interval_ms = 20,
+                                     .scroll_threshold_start = 2,
+                                     .scroll_threshold_stop = 0,
+                                     .trigger_ms = 30};
+    processor = (struct device){
+        .config = &config, .data = &data, .name = "inertia", .api = &inertia_driver_api};
 
     test_routing_and_frames();
     test_move_decay();
@@ -973,6 +1299,7 @@ int main(void) {
     test_owned_slot_rearm();
     test_composite_permutations();
     test_failure_recovery_traces();
+    test_lifecycle();
     assert(data.lock.depth == 0);
     puts("inertia driver: PASS");
     return 0;

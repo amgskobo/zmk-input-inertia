@@ -51,7 +51,7 @@ jobs:
           set -o pipefail
           bash ./tests/run-integration-docker.sh ${{ matrix.variant }} 2>&1 | tee "$RUNNER_TEMP/inertia-results/${{ matrix.variant }}.log"
       - name: Preserve ordered results and source identities
-        if: always()
+        if: ${{ (always()) && github.ref != 'refs/heads/codex/input-inertia-review' }}
         uses: actions/upload-artifact@v7
         with:
           name: inertia-${{ matrix.variant }}-${{ github.run_attempt }}
