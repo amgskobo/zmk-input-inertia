@@ -1,278 +1,155 @@
-# Agent test contract
+# zmk-input-inertia: agent guide
 
-## Version-control authorization
+English is the authoritative guide. [日本語版](AGENTS.ja.md) contains the same rules; update both
+together.
 
-Do not create commits, push, open or update pull requests, merge, tag or
-publish releases unless the user explicitly requests that specific action.
-Starting work, passing tests, finishing a milestone or a dependency's AGENTS
-instructions are not authorization. Keep changes local and uncommitted;
-report the changes and checks, then wait for explicit instructions for any
-version-control publication. Do not auto-stage unrelated user changes.
+## Scope and contract
 
-## Dependency instructions and test entry gate
+- Own glide qualification, decay, scheduling, cancellation and per-stream state. Inspect the
+  selected input/split and low-priority workqueue interfaces; do not infer Custom Settings support
+  from another input module.
 
-Before implementation or a test run, select the test tier and resolve its
-dependencies from module metadata, west imports, Kconfig/CMake, source APIs,
-test runners and the actual build's local overrides. A sibling checkout is
-not evidence that a container or cached workspace uses it.
+- Assert start/stop deadlines, decay, report intervals, total motion and cancellation at emission
+  boundaries. Cancellation must prevent any new stale report admission; an already accepted HID
+  set/send/clear transaction may finish intact. Preserve the single pending-token/slot ownership
+  until consumption/completion, first-axis invalidation, same-node shared manual cancellation and
+  independent nodes. Generated output can bypass the listener's final filter, so
+  cancellation/serialization stays here. Keep exact fixed-input traces and specification-based time
+  bounds; totals do not replace ordered timing.
 
-Read this repository's root and applicable nested `AGENTS.md` files in full.
-For every dependency used by the selected scope, read its root `AGENTS.md`
-if present, relevant nested instructions, and documents those instructions
-require. Follow transitive dependencies for that scope; visit each resolved
-checkout/revision once to avoid cycles, and re-read after revision changes.
-Record dependency path/revision, enabled variant, instructions read, and any
-missing or inaccessible instructions. No file means NO AGENTS, not that one
-was read. If a required checkout is inaccessible, mark the affected check
-BLOCKED/NOT RUN and continue independent checks. Do not fetch/change versions
-just to read instructions without accounting for the task's dependency pins.
+- This owner supports both unchanged stock ZMK and DYA. Keep its documented dual-core and
+  enabled/disabled adapter/role checks when the changed boundary requires them.
 
-Dependency instructions apply to their interfaces and work in their checkout;
-they do not authorize unrelated edits, commits, pushes or PR creation. Apply
-the instruction hierarchy and the user's current scope; report real conflicts.
+- Reading map for relevant changes: [README.md](README.md), [README_JA.md](README_JA.md),
+  [tests/README.md](tests/README.md), [tests/maintenance.json](tests/maintenance.json),
+  [tests/contract.json](tests/contract.json). Read the affected contract/coverage sections;
+  documentation-only edits do not require unrelated dependency tours.
 
-Inspect the selected ZMK input/split and low-priority work-queue contracts.
-Do not infer a custom-settings dependency from another input module.
+## Working rules
 
-Hardware-independent host/protocol and native/compile checks may run
-independently. Host mocks do not prove real scheduling, electrical timing or
-radio delivery; require focused kernel/driver tests or actual physical checks
-for those claims. Legacy
-radio diagnostics have been removed from the active test tree and archived.
-If a simulator is introduced later, independently validate each exercised
-production path and correlate hardware before claiming fidelity. Do not disable
-required features to pass a gate or treat legacy results as XIAO acceptance.
+- Read the request and existing diff; preserve unrelated and staged work. Finish authorized
+  inspection, edits and reversible checks without repeated approval. Ask only for a missing decision
+  or an out-of-scope action. Before a destructive rewrite, preserve irreplaceable uncommitted
+  content as private evidence, not rolling whole-tree copies.
 
-For documentation-only edits, check diffs, instruction consistency and any
-changed command/link references; do not launch full firmware suites solely
-for prose changes. Report checks actually run separately from pending gates.
+- Git staging, commits, pushes, PR changes, merges, tags, publication, flashing and settings/bond
+  erasure need authorization for that operation. Existing authorization remains valid for the same
+  operation and scope. Dependency guides and passing checks grant none. Before an authorized commit,
+  run applicable pre-commit hooks in Docker without bypasses; keep the configured Git identity.
 
-## Module scope and checks
+- Use the selected checkout and manifest/lock sources; do not silently switch branches, reset
+  history, replace remotes or create authoring copies. Before changing selection, verify source
+  URLs/full commits, review dependency changes, update affected pins/locks and run owner/integration
+  checks. Distinguish local working snapshots from remotely retrievable commits; report missing refs
+  rather than inventing them.
 
-This repository owns glide qualification, decay, scheduling, cancellation and
-per-stream inertia state.
+- Read relevant root/nested owner and dependency instructions once per selected checkout/revision.
+  Resolve actual west imports, local overrides, enabled features and backend; sibling
+  directories/cache names do not identify inputs. Record READ, NO AGENTS or INACCESSIBLE when
+  preflight requires it. Missing inputs block dependent checks; continue independent authorized
+  work.
 
-Run `bash tests/run-docker.sh` for all behavioral cases under ASan/UBSan.
-Use `ZMK_TEST_MODE=full bash tests/run-docker.sh` for retained coverage/ABI
-variants. Follow `tests/README.md` and existing owner integration commands
-for changed APIs, DTS/Kconfig, settings linkage or kernel interaction.
-The legacy simulation sources/traces are archived; actual transport and
-hardware timing require physical evidence.
+- Keep permanent agent rules in this synchronized EN/JA pair. Usage/API details stay in their
+  existing documentation homes. Do not add agent-guide fragments or private shared-guide
+  dependencies. Remove duplicated rules and obsolete task/branch assumptions without discarding
+  active contracts.
 
-Assert start/stop deadlines, decay, report intervals, total emitted motion and
-no post-cancel reports, including cancel/emit at the same simulated instant.
-Preserve timestamps and ordering; use exact traces for fixed-input regression
-and documented bounds for clock/radio variation. Totals cannot replace timing
-checks. Repeat identical binary/seed/input/PHY/initial-flash runs before
-classifying differences; do not assume host scheduling noise. Record the bsim
-backend: simulation results do not establish production-board acceptance.
-Run `git diff --check`; snapshot acceptance requires an explained
-intentional behavior change.
+## Execution environment
 
-## Small module-owned checks (2026-10-05)
+- Run local automated test/build runtimes and dependency setup in Docker; a documented DevContainer
+  qualifies. Unless stated otherwise, work from the owner root in its resolved workspace. Launch
+  Docker-wrapper scripts on the host; run their inner Python/Node/compiler entries inside the
+  prepared container without wrapping Docker again. Host source/Git/reference checks and evidence
+  export are allowed; do not install test packages/toolchains on the host. Keep dependencies,
+  runtime/build trees and caches in images or named volumes.
 
-`tests/contract.json` documents the host entry point, assertion groups and
-explicit limits; it is not an executable dispatcher. Run that command from this repository; no keyboard checkout or whole
-keyboard simulation is needed. The fixture list describes contract groups,
-not a replacement for the complete existing host runner.
+- Separate preparation and deliberately selected online compatibility checks from ordinary
+  network-free tests. Inspect the available immutable image ID/digest and verified
+  dependency/toolchain revisions; pass the image through the owner's declared image option; honor
+  declared local overrides and record working files. A launcher that installs or fetches
+  dependencies belongs to preparation/online checking, not an offline run. Do not silently pull,
+  advance pins or mutate shared caches, patch dependencies or disable required features to clear a
+  gate. Missing inputs block dependent checks only; documented preparation within an authorized
+  build/setup remains in scope.
 
-For routine selection, this section refines the broad execution triggers above:
-pure arithmetic, rendering, settings validation and injected state transitions
-use the host suite. Run owner native/compile variants when public APIs, DTS,
-Kconfig, registration or real kernel interaction changes. Use physical or independently validated focused transport checks for
-BLE/split delivery, congestion and reconnect; do not add whole-board
-simulation as a second proof of a pure calculation. Keep
-scheduler/driver timing checks separate where host stubs cannot prove them.
-Owner release checks, dependency preflight and physical acceptance still apply.
+- Reuse compatible environments/caches, retaining required clean-cache lanes. Provide required
+  inputs, including relevant untracked files, through read-only mounts or isolated container copies;
+  verify source identity before/after. Isolate mutable build/runtime/install trees per job under one
+  CPU/memory budget, including nested workers. Build once per configuration and reuse that exact
+  binary for identical repeats; cached PASS is not a new run. Performance comparisons separate
+  preparation/staging/build/execution/validation and cold/warm conditions. Existing hosted platform
+  jobs retain their own OS requirements.
 
-Completeness means covering the owned contract: normal behavior, boundary and
-invalid input, independent state, reset/cancellation and failure recovery where
-applicable. Coverage percentages alone are insufficient. Preserve ordered
-outputs and explicit time inputs; record an untested boundary as a gap instead
-of marking the entire module complete. Before removing a fixture, map each
-unique assertion to its retained replacement and preserve unresolved failures.
+## Checks and entry points
 
+- Documentation/instructions only: run `git diff --check`, verify changed paths/commands and EN/JA
+  agreement. Without Git history use `git diff --no-index --check` on before/after copies. Firmware
+  suites are not required solely for prose changes.
 
-Quick/full execution and retired case mappings are documented in
-`tests/README.md`. Full-mode coverage and all retained assertions remain
-required when claiming those specific checks; quick is not a coverage report.
+- On the host, portable behavior uses `bash tests/run-docker.sh`; full mode is
+  `ZMK_TEST_MODE=full bash tests/run-docker.sh`. Select an already inspected immutable image with
+  `ZMK_TEST_IMAGE`. These scripts launch Docker; inside that prepared container use
+  `bash tests/run.sh` with the same `ZMK_TEST_MODE`. Keep the complete affected matrix for
+  interface/infrastructure changes; quick is not a coverage report.
 
-## Canonical owner tests and continuous maintenance
+- For public API/DTS/Kconfig/registration/settings or kernel changes, use the offline inner entry in
+  the prepared image with this owner mounted at `/src`. Set `ZMK_TEST_OFFLINE_WORKSPACE` to the
+  selected resolved core and `ZMK_TEST_OUTPUT` to a fresh absolute container path. Run
+  `bash tests/integration/run.sh upstream` and `bash tests/integration/run.sh dya`, selecting the
+  matching workspace and a distinct output each time. Retain native/negative controls. The legacy
+  `tests/run-integration-docker.sh` may perform online setup and does not forward the full offline
+  selection; do not assume host variables pass through Docker.
 
-All executable test assertions, fixtures, models, mutation operators, test
-selection/configuration and build-result validators live in this repository's
-`tests/`. Run the entries documented in `tests/README.md`; no keyboard checkout,
-sibling test suite, private backup script or source-rewriting adapter supplies
-missing assertions. CI and package scripts may dispatch those entries. Public
-sample/diagnostic tools remain production code. Minimal guarded production
-probes may expose real state/interleavings, but test scenarios and assertions
-belong in `tests/`, not another copy of the production algorithm.
+- For the DYA offline variant also supply `ZMK_TEST_CUSTOM_SETTINGS_ARCHIVE` with the exact
+  revision/digest admitted by `tests/integration/offline.py`. A current working registry override is
+  separate evidence and does not replace this pinned-dependency check. Prepare missing archives
+  explicitly; do not fetch them during ordinary tests.
 
-Maintain completeness per owned contract: normal/boundary/invalid behavior,
-independent state, ordered outputs/time, reset/cancellation, failure/recovery,
-role/feature gates and public protocol/schema where applicable. A registry or
-coverage percentage does not establish completeness. Each implementation family
-must map to named current fixtures and explicit gaps in the owner contract.
-New regressions must fail before the repair or under an identified negative
-control. Preserve unique assertions when merging/removing old tests; archive
-their source and failure evidence externally first, with a replacement map.
+## Test quality
 
-Compatibility follows the individual owner's supported targets. Run both
-unchanged stock ZMK upstream and DYA only for a dual-target module. DYA-only
-modules require DYA tests, not an artificial stock build or disabled-feature
-stock test. Record unsupported targets as NOT APPLICABLE, never PASS. Never
-patch a dependency, disable required features or weaken assertions to manufacture
-compatibility. Resolve/read the actual supported dependencies and backend.
+- Keep module fixtures, assertions, independent oracles, mutations, selectors and validators in the
+  owner's tests/; retain documented Web and non-module test layouts. CI/package scripts dispatch
+  owner entries, not sibling/private suites or source-rewriting substitutes. Probes expose state,
+  not scenarios. Map implementation families to normal/boundary/invalid, independent-state,
+  ordered-time/output, reset/cancel, failure/recovery and role/protocol cases and explicit gaps.
 
-Keep the current tests small by boundary. Quick runs every behavioral scenario
-once with sanitizers where supported. Full retains relevant role/ABI/optimized,
-coverage, kernel and supported-core integration checks; it must not drop scenarios
-to save time. Use focused changes for daily work and the complete owner matrix
-for interface/infrastructure changes and maintenance. Measure redundant build
-cost before consolidating it, reuse one binary for identical repeats, use
-explicit clean caches/pins, and avoid implicit network updates during testing.
+- A regression needs a failing original or named control. Expected-failure controls qualify only by
+  their specified assertion/rejection; report them separately from product results. Do not weaken
+  assertions, accept unclassified snapshots or count compilation errors as killed runtime faults.
+  Before retiring tests, archive unique original assertions/failures externally with a replacement
+  map. Quick runs every behavioral scenario with sanitizers where supported; full adds the
+  documented ABI, optimization, coverage, kernel and supported-core matrix.
 
-Each run uses a fresh output directory and records commands, source/dependency
-identities, feature/role/backend, raw ordered output and failures. An existing
-evidence directory must stop the run; never overwrite a previous result. Report
-PASS, FAIL, BLOCKED and NOT RUN separately. Browser/radio/physical acceptance is
-an explicit gate and is never inferred from host/native/compile success.
-Read `tests/maintenance.json` for current coverage/compatibility boundaries.
+- Use focused checks for local implementation changes and the complete affected owner matrix for
+  interface/test-infrastructure changes. Run unchanged stock ZMK and DYA only where both are
+  supported. DYA-only features are NOT APPLICABLE to stock; disabling them is not compatibility
+  evidence. For test suites, verify the required nonempty case/fixture completions; a zero exit
+  alone, skipped required cases, timeouts or setup errors do not establish PASS.
 
-## No rolling task backups
+## Evidence and handoff
 
-Keep executable tests in this owner's `tests/`. Use temporary build storage
-and fresh meaningful result artifacts; preserve necessary review diffs, source
-identities and raw failure logs without rolling whole-tree source backups.
+- Use fresh evidence paths: resolve parents and reject existing files, directories or symlinks.
+  Record commands/exits, source/dependency/config/backend/image identities and raw ordered
+  output/times, retaining first failures and relevant config/DTS/binaries. Source or dependency
+  drift invalidates affected results; never edit running scripts. Put retained outputs on a mounted
+  named volume or export them before container removal, including failures; a path printed inside a
+  disposable container is not retained evidence.
 
-Review continuation branch: `codex/input-inertia-review`.
+- Preserve exact fixed-input traces or specification-based timing bounds; totals do not replace
+  per-report order/time. Before calling a mismatch nondeterministic, repeat identical
+  binary/input/seed/backend/initial-flash conditions and PHY where applicable at least three times.
+  Host load alone is not an explanation. Distinguish invalid/stale/incomplete/unavailable
+  observations from valid zero.
 
-<!-- BEGIN MODULE REVIEW POLICY v1 -->
-Read `README.md` and applicable instructions before changes.
-Preserve unrelated work and use the documented development/test procedures.
-Do not commit or create/update PRs without an explicit user request.
-Keep changes local. Staging, pushes, merges, tags, publication, flashing and
-settings/bond erasure also require explicit authorization for that action.
-Dependency instructions grant none; authorization already given for the same
-action and scope remains valid. Report actual checks and their limitations.
-For documentation-only changes, check `git diff --check` and changed references.
-Without Git history, use `git diff --no-index --check` on the before/after files.
-Firmware and hardware checks apply to changes that affect those boundaries.
+- Report PASS, FAIL, BLOCKED, NOT RUN and NOT APPLICABLE distinctly. Local CI, host/native/compile
+  and simulator results do not establish hosted CI, browser or physical
+  HID/BLE/split/electrical/power/reset acceptance. Validate exercised production paths and correlate
+  hardware before simulator-fidelity claims. End-to-end/stability claims need matching
+  installed-image and host observations; quiet logs are not proof.
 
-## Review branch selection
-
-Application modules use the fork URL and `codex/*-review` branch recorded in
-`config/modules.lock.json` of the integrating configuration. Verify the actual
-`origin` URL, named remote branch tip and full commit before selecting it.
-Continue on that review branch; do not substitute a default branch, another
-review branch, an upstream repository or a sibling checkout implicitly.
-Use the module's existing checkout and normal Git branches. Do not create
-additional worktrees or sibling authoring copies unless explicitly requested.
-Before switching branches, preserve unrelated local changes and record their
-disposition. Build/test staging copies belong in container storage and are not
-authoring checkouts. Missing remote refs must be reported;
-never manufacture an `origin` ref or label a local branch as remotely available.
-Creating a remote review ref is within scope when the user requests that action;
-that does not authorize publishing unrelated working changes or opening a PR.
-Ordinary builds use the fixed commit and complete source identity. Advancing a
-review branch requires an explicit preparation step, reviewed dependency changes,
-updated pins/lock and the affected owner/integration checks. A local working
-snapshot is distinct from a retrievable committed snapshot for hosted builds.
-
-## Publication privacy and local execution
-
-This rule applies to information prepared for publication or external sharing.
-During an authorized task, agents may inspect and use actual local paths,
-configuration, host/terminal/device identities and private test evidence as
-needed for implementation, diagnosis, identity matching and validation. Such
-local access does not itself authorize collection outside the task or disclosure.
-
-Before preparing a public commit, push, PR, release, documentation/site output
-or CI artifact, review the actual publication payload, including source,
-comments, AGENTS files, examples, test fixtures, logs, screenshots, generated
-files and metadata. Exclude user-related names and preferences, private absolute
-paths and local-environment details, workstation/terminal identities, individual
-device labels, ports, serials, addresses, pairing/bond identities, credentials,
-and user- or device-specific test/measurement histories. Also check generated
-and uploaded artifacts; checking source prose alone is insufficient.
-
-Use repository-relative paths, documented variables/placeholders, neutral names
-and clearly synthetic fixtures in public material. Declared public project
-identifiers, existing attribution, standard API/product/platform names and
-reproducible support requirements remain technical project information; do not
-present one user's actual environment as a project requirement. In particular,
-documenting supported platforms is distinct from identifying a user's device.
-
-Keep exact originals and identifiers in appropriate private/local task records
-when required for accurate evidence or device matching. Produce a separate
-sanitized publication copy without weakening assertions or inventing results;
-do not describe it as the unchanged raw record. If useful evidence cannot be
-shared without exposing these details, keep it private and state the public
-validation limit. Recheck the final publication snapshot and its artifacts.
-Existing authorization requirements for version-control, publication, device
-writes, resets and data erasure still apply.
-
-## Container test execution
-
-Run automated tests, builds and dependency setup inside Docker. Host entry points
-may launch containers and export results; do not run test runtimes or install test
-packages/toolchains on the host. Owner source may be mounted read-only. Keep
-test-only ZMK/Zephyr/tool checkouts, runtime environments, temporary files, build
-outputs and caches in container images or named volumes. Tests must not require
-host sibling dependency checkouts or private absolute paths.
-
-Resolve and verify the selected revisions inside the container. Prepare missing
-dependencies explicitly in an isolated container workspace; do not silently update
-shared caches or pins. Preserve all owner scenarios, assertions and required
-matrices. Hardware acceptance needs documented device access; report unavailable
-container transports as BLOCKED rather than substituting host execution or mocked
-acceptance. Export only reviewed evidence and retain the publication privacy rule.
-
-## Fast container test execution
-
-Use prepared container environments, persistent caches and bounded parallelism
-to reduce execution time. Preserve every required scenario, assertion, negative
-control, sanitizer, supported-core variant and repeat.
-
-- Separate environment preparation from test execution. Pin container images by
-  digest and resolve dependency revisions explicitly. Reuse prepared environments
-  only when their image, toolchain, dependency revisions and lockfiles match.
-  Do not fetch or update dependency inputs during an ordinary test run. Missing
-  inputs block only dependent checks.
-
-- Keep dependency checkouts, installed test environments, temporary files, build
-  directories and caches in container images or named volumes. Prefer Linux
-  filesystem storage for intensive file access. Any staged owner sources must
-  preserve all required test/compiler inputs, including relevant untracked files,
-  with source identity and pre/post-run drift verification.
-
-- Reuse explicitly selected compiler and package caches with their supported
-  identity and concurrency checks. Keep incompatible environments separate.
-  Never share writable build directories or mutable installed dependency trees
-  between independent jobs. Preserve required clean-cache checks; use isolated
-  fresh caches for those checks.
-
-- Dispatch each owner's canonical test entries from inside the container.
-  Common orchestration may select, schedule and collect those entries; assertions
-  and fixtures remain in the owning repository. Avoid nested Docker launches and
-  repeated environment preparation for compatible jobs. Isolate each job's
-  environment, working files and outputs.
-
-- Enforce one configurable CPU and memory budget across concurrent suites,
-  targets, compiler jobs and test workers. Account for nested parallelism.
-  Parallelize only independent jobs; preserve required execution and output order.
-
-- Within a run, build each required binary once per distinct input/configuration
-  variant and reuse that exact binary for required identical-condition repeats,
-  with each repeat's required initial state. Execute every required test; cached
-  artifacts or previous PASS records do not establish a new test execution.
-
-- Keep fresh build and evidence directories. Record actual commands, exits,
-  completion markers, ordered output, source/dependency/image identities and
-  cache configuration. Measure preparation, staging, build, execution and
-  validation separately.
-
-Quick and full retain their existing contracts. Interface/infrastructure changes
-still require the complete owner matrix. Evaluate speed changes using equivalent
-inputs and checks, report cold and warm runs separately, and retain failures.
-<!-- END MODULE REVIEW POLICY v1 -->
+- Before sharing, review source/comments/guides/examples/logs/media/artifacts/metadata for
+  credentials, personal/host/device IDs, private paths, bonds and individual histories/preferences.
+  Authorized local work may use real values; keep private originals and label sanitized copies. Use
+  clearly synthetic public fixtures/placeholders; preserve public project/API identifiers, licenses
+  and attribution. Keep useful diffs/evidence. Handoff reports behavior, files, actual checks,
+  gaps/risks and version-control/device actions.
