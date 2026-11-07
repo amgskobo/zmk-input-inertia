@@ -182,6 +182,25 @@ HIDの設定・送信・クリアは、通常のZMK pointing listenerと同じ�
 
 Zephyr標準の `CONFIG_INPUT_MODE_THREAD` が必要です。同期入力モードはHID書き込みが並行するため、ビルド時に拒否します。
 
+BLEプロファイルの切替、出力先transportの変更、切断など、endpointの識別情報が変わると、
+すべてのInertiaノードの全streamの慣性を停止します。各ノードはendpointのsnapshotを保持し、
+既存のmutexとgenerationで状態を保護します。workerと入力consumerも、減衰・出力受付・
+送信完了の各境界で選択中のendpointを比較するため、変更通知が遅れても古い慣性を継続しません。
+同じendpointの初回・繰り返し通知は新しい手動操作を取り消しません。USB/NONEの識別には、
+使っていないBLEプロファイル領域の値を含めません。IDLEまたはSLEEPへの遷移でも、
+既存の慣性を終了します。ACTIVEや同じactivity状態の通知は、新しい手動操作を取り消しません。
+取消時には、キュー内または送信中の枠を再利用せず、endpointへの送信完了も待ちません。
+入力consumerがすでに受け付けたreportは完了できます。新しいendpointでは、
+新たな手動入力から慣性を開始できます。
+
+この終了処理は、内部tokenをcoreの活動計上から除外しません。選択したZephyrの入力dispatcherは
+NULL-device callbackへすべてのイベントを渡し、選択したZMKのpointing activity callbackは
+MSC tokenを含む各イベントでactivity workを投入します。そのため、接続中のglide token、
+終了済みでもキューに残るtoken、接続先のない状態で新たな手動操作から始まるtokenも、
+活動時刻を更新し得ます。生成tokenを計上から除くには、core側の方針・filterが必要です。
+このモジュールは入力スレッド上でのHID直列化を維持し、イベントの書換えや専用dispatcherで
+tokenを隠す処理は追加しません。実機の消費電力やIDLE/SLEEPの期限の改善を示すものではありません。
+
 ## DYA Studio設定
 
 [Custom Settings](https://github.com/cormoran/zmk-feature-custom-settings)・Studio RPCと `CONFIG_ZMK_INPUT_INERTIA_CUSTOM_SETTINGS=y` を
@@ -216,6 +235,13 @@ fullは同じシナリオに最適化・カバレッジ・ABI構成を追加し�
 オンラインは選択したブランチを解決し、明示的なオフライン実行は固定リビジョンを検証します。
 CIは両コアの失敗時の証跡も保存します。新しい出力先、個別コマンド、失敗対照、実機での
 未検証範囲は[所有者テストガイド](tests/README.md)を参照してください。
+
+nativeのruntime・設定reload・endpoint・shared HIDの判定は、終了0とPASSマーカーが
+そろっていても、回復可能なsanitizer診断があれば拒否します。実プロセスの終了値と
+検証器の拒否は別の観測として残します。実際に回復して終了するASan/UBSanの制御用ELFで
+各起動経路を検証し、hostのsanitizer結果とnativeの構成ごとの結果を区別します。
+core・依存先を含め、各診断を実際にコンパイルしたソース位置と対応付けます。
+厳密な回復抑止フラグ、NSIのコンパイラー証跡、残る検証範囲はテストガイドに記載しています。
 
 ## ライセンス
 

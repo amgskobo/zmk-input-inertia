@@ -2,9 +2,12 @@
 """Require all first-boot and reload phases, so an early reload exit cannot pass."""
 from pathlib import Path
 import sys
+from native_log import validate as validate_native_log
 FIRST = 'PASS: Inertia registry range/type rejection, per-node apply and NVS save'
 RELOAD = 'PASS: persisted Inertia value reloads'
 def validate(first, reload):
+    validate_native_log(first)
+    validate_native_log(reload)
     assert FIRST in first, "first boot did not complete settings save"
     assert RELOAD in reload, "reload did not verify persisted driver state"
 def main():

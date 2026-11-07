@@ -26,13 +26,15 @@
     "ci": "Both supported-core integration variants, digest-pinned image, fresh retained results even on failure; online branch resolution and exact offline pins are distinct"
   },
   "gaps": [
-    "Physical USB/BLE/split delivery, timing, power and retention require matching production-board evidence."
+    "Physical USB/BLE/split delivery, timing, power and retention require matching production-board evidence.",
+    "Sanitizer-clean native acceptance is configuration-specific. Recovering diagnostics reject admission independently of process exit0/markers; classify each actual compiled source finding, retaining raw process/verifier exits and owner marker order. Host sanitizers do not establish native sanitizer acceptance."
   ],
   "backends": {
     "supported": "CONFIG_INPUT_MODE_THREAD; default on both supported cores",
     "unsupported": "Synchronous input is rejected by the build guard; direct HID writers outside the input thread are not serialized"
   },
   "suppression_scope": "No source-button/final-frame policy. Retain scheduled motion token admission, first-axis cancellation and input-thread HID serialization; final source filter is not a global output interceptor.",
+  "native_admission": "tests/integration/native_log.py is shared by runtime/reload, endpoint, shared-HID and the direct settings validator. test_native_log.py uses recovering ASan/UBSan ELF controls with exit0/all markers, three fresh starts per launcher and both DYA phases, plus accepted locationless labels. Actual original launchers must fail the regression's rejection assertions. Existing timeout/exit/marker/assertion controls remain. Supplemental ASan-only/strict builds require CONFIG_ASAN_RECOVER=n and actual final -fno-sanitize-recover=all; retain distinct Zephyr/NSI compiler inputs and flags. See tests/README.md.",
   "runtime_settings": "Public runtime API, actual-source adapter, all100 percentage round trips and coupled thresholds; real kernel settings cancellation plus DYA registry/NVS reload; tests/README.md",
   "timeout_conversion": "Millisecond trigger/report/retry reservations, exact ceil, complete uint16 domain; normal clocks use native32 arithmetic, high rates retain kernel tick width. Host full coverage/width controls and actual Zephyr conversion comparison retained among29 endpoint groups. Physical latency NOT RUN.",
   "running_rearm": "An already-running handler must preserve a newer trigger timer without decay/output. Four host/native cases cover move/scroll and armed/active glide, explicit deadlines, exact first reports and post-cancel silence; pre-fix native binary fails the named assertion three times.",

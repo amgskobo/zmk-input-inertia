@@ -61,6 +61,44 @@ fail for their named reason. Synchronous input is rejected by the selected
 ZMK pointing Kconfig before the defensive driver assertion; expected warnings
 are preserved.
 
+Every native runtime, settings reload, endpoint and shared-HID log is checked by
+[integration/native_log.py](integration/native_log.py), including expected-failure
+modes. A recovering ASan/UBSan finding rejects sanitizer-clean admission even
+when the process exits 0 and prints every required PASS marker. Raw process
+exits remain in the corresponding `.exit` files; a verifier rejection is separate
+from the process exit. The standalone settings-pair validator applies the same
+check to both phases. Existing exit, timeout, marker and named-assertion checks
+remain required. Generic UBSan `runtime error:` diagnostics require a source
+line location; locationless endpoint labels do not indicate sanitizer findings.
+
+[integration/test_native_log.py](integration/test_native_log.py) compiles real
+recovering ASan and UBSan control ELF files once, verifies their diagnostic,
+markers and exit 0, then requires each actual launcher to reject three fresh
+starts of the same ELF. Both DYA settings phases are covered independently.
+Only west's workspace/build responses are controlled, so these are admission
+controls rather than native firmware acceptance. Clean control ELF files retain
+the benign label and pass. `--entry-root ORIGINAL_OWNER` can check preserved
+original launchers against the same regression; their acceptance must fail the
+named rejection assertions. `INERTIA_ADMISSION_EVIDENCE` optionally selects a
+fresh absolute directory retaining controls, logs and raw/launcher exits.
+`--control-elfs RETAINED_CONTROL_DIRECTORY` reuses its exact three ELF files
+after checking the preserved C fixture against the current fixture, so original
+and fixed launchers can be compared using identical binaries.
+
+Native sanitizer configurations are separate from portable host sanitizers.
+For supplemental native builds, retain the complete compile/link commands and
+effective config for every fixture. ASan-only and strict ASan/UBSan require
+`CONFIG_ASAN_RECOVER=n` and the final compiler recovery option
+`-fno-sanitize-recover=all`; an earlier flag can be overridden by Zephyr's later
+`-fsanitize-recover=all`. Retain the NSI runner's own Make dependency/object and
+compiler flags independently of Zephyr's flags. Do not describe its default
+optimization as O2. Build once per configuration and reuse the exact ELF across
+three fresh initial states. A diagnostic from selected core or dependencies
+blocks that configuration's sanitizer-clean gate; it does not establish a
+module defect or classify later diagnostics. Keep source locations and hashes
+for each finding and actual owner marker order. Host/native results do not
+establish installed hardware, browser or hosted CI acceptance.
+
 ## Real kernel and input-thread boundaries
 
 The canonical integration entry includes both focused commands. In an already

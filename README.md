@@ -296,6 +296,14 @@ the explicit offline path checks exact pins. CI retains both variants' failure
 evidence. See [the module-owned test guide](tests/README.md) for fresh outputs,
 focused commands, negative controls and physical acceptance gaps.
 
+Native runtime, settings reload, endpoint and shared-HID admission also rejects
+recovering sanitizer diagnostics when a process exits 0 and prints PASS markers.
+Raw process exits and verifier rejection are separate observations. Real
+recovering ASan/UBSan control ELF files exercise the launchers; host sanitizers
+remain separate from native sanitizer configurations. Source-located findings
+must be classified individually, including core/dependency findings. The test
+guide documents strict recovery flags, NSI compiler evidence and remaining gates.
+
 The [responsibility review](tests/README.md) maps retained glide, frame, token
 and cancellation state independently of final source-button suppression.
 Scheduled input-thread HID transactions remain owned and tested here.

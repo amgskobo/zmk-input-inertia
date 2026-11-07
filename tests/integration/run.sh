@@ -87,10 +87,16 @@ for repeat in 1 2 3; do
     flash=()
     if [ "$variant" = dya ]; then flash=("--flash=$runtime_dir/flash-$repeat.bin"); fi
     runtime_log="$work_dir/build/runtime.run-$repeat.log"
-    timeout 30 "$runtime_dir/zephyr/zmk.exe" "${flash[@]}" >"$runtime_log" 2>&1
+    if timeout 30 "$runtime_dir/zephyr/zmk.exe" "${flash[@]}" >"$runtime_log" 2>&1; then result=0; else result=$?; fi
+    printf '%s\n' "$result" >"$work_dir/build/runtime.run-$repeat.exit"
+    python3 "$tests_dir/native_log.py" "$runtime_log"
+    test "$result" = 0
     grep -Fq 'inertia runtime tests: PASS' "$runtime_log"
     if [ "$variant" = dya ]; then
-        timeout 30 "$runtime_dir/zephyr/zmk.exe" "${flash[@]}" >"$runtime_dir/reload-$repeat.log" 2>&1
+        if timeout 30 "$runtime_dir/zephyr/zmk.exe" "${flash[@]}" >"$runtime_dir/reload-$repeat.log" 2>&1; then result=0; else result=$?; fi
+        printf '%s\n' "$result" >"$runtime_dir/reload-$repeat.exit"
+        python3 "$tests_dir/native_log.py" "$runtime_dir/reload-$repeat.log"
+        test "$result" = 0
         grep -Fq 'persisted Inertia value reloads' "$runtime_dir/reload-$repeat.log"
     fi
 done

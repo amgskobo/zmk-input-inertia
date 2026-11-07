@@ -23,6 +23,7 @@ sha256sum "$output/build/zephyr/zmk.exe" >"$output/binary.sha256"
 for repeat in 1 2 3; do
     if timeout 10 "$output/build/zephyr/zmk.exe" >"$output/run-$repeat.log" 2>&1; then result=0; else result=$?; fi
     printf '%s\n' "$result" >"$output/run-$repeat.exit"
+    python3 "$root/tests/integration/native_log.py" "$output/run-$repeat.log"
     if [ "$mode" = counterexample ]; then
         test "$result" != 0 && test "$result" != 124
         grep -Fq 'pending inertia report overwritten by another HID producer' "$output/run-$repeat.log"

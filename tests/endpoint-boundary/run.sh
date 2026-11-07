@@ -51,6 +51,7 @@ for run in 1 2 3; do
         cp "$log" "$INERTIA_NATIVE_ARTIFACTS/run-$run.log"
         printf '%s\n' "$result" >"$INERTIA_NATIVE_ARTIFACTS/run-$run.exit"
     fi
+    python3 "$root/tests/integration/native_log.py" "$log"
     if [ "$mode" = endpoint-error-counterexample ]; then
         test "$result" != 0 && test "$result" != 124
         grep -Fq 'failed endpoint compressed recovery interval' "$log"

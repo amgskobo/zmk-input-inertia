@@ -41,6 +41,10 @@
   "infrastructure": {
     "fixtures": [
       {
+        "fixture": "tests/integration/test_native_log.py",
+        "asserts": "Shared native_log.py rejects real recovering ASan/UBSan diagnostics independently of exit0 and all required markers at actual runtime/reload/endpoint/shared-HID launchers, three fresh starts per control ELF; direct settings pairs check both phases. Benign locationless labels remain accepted. Controlled west responses establish admission, not firmware acceptance."
+      },
+      {
         "fixture": "tests/test_runtime_coverage.py",
         "asserts": "Actual full runtime entry rejects empty, unrelated and partially measured reports; normal full entry still measures actual per-function lines/branches"
       },
