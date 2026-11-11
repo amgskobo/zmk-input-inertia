@@ -51,7 +51,7 @@ jobs:
           set -o pipefail
           bash ./tests/run-integration-docker.sh ${{ matrix.variant }} 2>&1 | tee "$RUNNER_TEMP/inertia-results/${{ matrix.variant }}.log"
       - name: Preserve ordered results and source identities
-        if: ${{ (always()) && github.ref != 'refs/heads/codex/input-inertia-review' }}
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: inertia-${{ matrix.variant }}-${{ github.run_attempt }}
@@ -61,6 +61,9 @@ jobs:
             ${{ runner.temp }}/inertia-results/${{ matrix.variant }}.log
             ${{ runner.temp }}/inertia-results/${{ matrix.variant }}/resolved-manifest.yml
             ${{ runner.temp }}/inertia-results/${{ matrix.variant }}/build/*.log
+            ${{ runner.temp }}/inertia-results/${{ matrix.variant }}/build/*.exit
+            ${{ runner.temp }}/inertia-results/${{ matrix.variant }}/build/runtime/reload-*.log
+            ${{ runner.temp }}/inertia-results/${{ matrix.variant }}/build/runtime/reload-*.exit
             ${{ runner.temp }}/inertia-results/${{ matrix.variant }}/build/*/zephyr/.config
             ${{ runner.temp }}/inertia-results/${{ matrix.variant }}/build/*/zephyr/zephyr.dts
             ${{ runner.temp }}/inertia-results/${{ matrix.variant }}/build/*/zephyr/zmk.exe
