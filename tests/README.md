@@ -32,6 +32,44 @@ commands, assertions and gaps.
 
 ## Both supported cores and retained CI results
 
+The canonical integration entry also runs `tests/source-limits/run.sh WORKSPACE
+FRESH_OUTPUT`. Six positive profiles cover the unchanged automatic reservation,
+an explicit two-source bound, the maximum 256-source bound, no-listener/NULL
+fallback, sparse listener indices under automatic allocation and an out-of-bound
+listener whose disabled device excludes its actual callback. Each exact
+binary runs three times. Probes check the last reserved index, first rejected
+index, unchanged invalid-event payload/state, NULL-to-zero behavior, shared-node
+cancellation and settings retirement. Five named build rejections cover a base
+reference, a disabled child route, a sparse reference and both invalid Kconfig
+bounds. Limited allocation additionally runs all 29 endpoint plus 11 lifecycle
+groups and the seven-report actual-listener/HID fixture, three times per binary
+on both supported cores. `INERTIA_NATIVE_EXTRA_CONF` supplies that explicit
+configuration to the two existing native entries; it does not select scenarios.
+All original auto/default fixtures and 13 DTS/backend guards remain required.
+
+For identified guard controls, stage a byte-identical disposable owner copy,
+then run `python3 tests/source-limits/apply_fault.py base STAGED_OWNER` or the
+`child` fault. Invoke that staged owner's source-limit entry with
+`INERTIA_SOURCE_LIMIT_GUARD=base` or `child`, matching the fault. Its build must
+succeed and the launcher must then fail the exact `FAILED: reject-base requires
+named rejection` or `FAILED: reject-child requires named rejection` assertion.
+A compiler/setup failure does not qualify. Run both controls on both cores;
+focused guard admission cannot replace the complete canonical matrix.
+Use the focused selector only on the standalone source-limit entry, for example
+`INERTIA_SOURCE_LIMIT_GUARD=base bash STAGED_OWNER/tests/source-limits/run.sh
+WORKSPACE FRESH_OUTPUT`. The canonical integration entry rejects any nonempty
+`INERTIA_SOURCE_LIMIT_GUARD` before invoking tools or creating output. Its actual
+clean-ELF admission regression checks all four focused selectors; the normal
+dispatch control requires every allocation profile, rejection guard and both
+default/limited endpoint and HID completions. Preserved original-entry runs must
+fail the named focused-selection rejection assertion.
+The `device` fault (`apply_fault.py device STAGED_OWNER`) instead removes the
+upstream device-status gate. With
+`INERTIA_SOURCE_LIMIT_GUARD=device` its disabled-device positive build must fail
+the named source-limit compiler assertion, and the launcher must reject it with
+`FAILED: disabled-device must build with its declared callback sources`.
+This is a compile-time enumeration control, not a killed runtime fault.
+
 ```bash
 ZMK_TEST_OUTPUT=/absolute/fresh-upstream bash tests/run-integration-docker.sh upstream
 ZMK_TEST_OUTPUT=/absolute/fresh-dya bash tests/run-integration-docker.sh dya

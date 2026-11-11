@@ -39,8 +39,29 @@
 LOG_MODULE_REGISTER(zmk_input_inertia_input_processor_inertia, CONFIG_ZMK_INPUT_INERTIA_LOG_LEVEL);
 
 #define INERTIA_LISTENER_COUNT DT_NUM_INST_STATUS_OKAY(zmk_input_listener)
-#define INERTIA_STREAM_COUNT MAX(INERTIA_LISTENER_COUNT, 1)
+#define INERTIA_STREAM_COUNT                                                                        \
+    COND_CODE_0(CONFIG_ZMK_INPUT_INERTIA_MAX_SOURCES, (MAX(INERTIA_LISTENER_COUNT, 1)),                \
+                (CONFIG_ZMK_INPUT_INERTIA_MAX_SOURCES))
 #define INERTIA_FACTOR_Q8(percent) ((percent) * INERTIA_Q8_SCALE / 100)
+
+/* Match upstream's enabled listeners whose device is enabled, and every child,
+ * including disabled children: the listener enumerates DT_INST_FOREACH_CHILD. Source
+ * numbers are global DT_INST indices, so counting references is insufficient.
+ * Direct API callers remain responsible for their declared source indices. */
+#define INERTIA_CHECK_PROCESSOR(node, prop, index, source)                                           \
+    COND_CODE_1(DT_NODE_HAS_COMPAT(DT_PHANDLE_BY_IDX(node, prop, index),                            \
+                                   zmk_input_processor_inertia),                                  \
+                (BUILD_ASSERT((source) < INERTIA_STREAM_COUNT,                                     \
+                              "Inertia source limit excludes a referenced listener index");), ())
+#define INERTIA_CHECK_ROUTE(node, source)                                                           \
+    COND_CODE_1(DT_NODE_HAS_PROP(node, input_processors),                                          \
+                (DT_FOREACH_PROP_ELEM_VARGS(node, input_processors,                               \
+                                             INERTIA_CHECK_PROCESSOR, source)), ())
+#define INERTIA_CHECK_LISTENER(source, compat, unused)                                              \
+    COND_CODE_1(DT_NODE_HAS_STATUS(DT_PHANDLE(DT_INST(source, compat), device), okay),              \
+                (INERTIA_CHECK_ROUTE(DT_INST(source, compat), source)                             \
+                 DT_FOREACH_CHILD_VARGS(DT_INST(source, compat), INERTIA_CHECK_ROUTE, source)), ())
+DT_COMPAT_FOREACH_STATUS_OKAY_VARGS(zmk_input_listener, INERTIA_CHECK_LISTENER, unused)
 
 /* Normal ZMK pointing listeners and inertia emission must share one consumer.
  * Synchronous input callbacks would reintroduce cross-thread HID mutation. */

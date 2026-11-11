@@ -27,12 +27,16 @@ zmk_root="$(west list zmk -f '{abspath}')"
 export ZEPHYR_BASE="$(west list zephyr -f '{abspath}')"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT HUP INT TERM
+extra_conf=()
+if [ -n "${INERTIA_NATIVE_EXTRA_CONF:-}" ]; then
+    extra_conf=("-DEXTRA_CONF_FILE=$INERTIA_NATIVE_EXTRA_CONF")
+fi
 if ! (cd "$workspace" && west build -p=always -s "$zmk_root/app" -d "$work/build" \
     -b native_sim//zmk_test_mock -- -DCONFIG_ASSERT=y \
     -DZephyr_DIR="$ZEPHYR_BASE/share/zephyr-package/cmake" \
     -DZMK_CONFIG="$root/tests/integration/runtime" \
     -DDTC_OVERLAY_FILE="$root/tests/endpoint-boundary/test.overlay" \
-    -DZMK_EXTRA_MODULES="$root;$root/tests/endpoint-boundary/module") > "$work/build.log" 2>&1; then
+    -DZMK_EXTRA_MODULES="$root;$root/tests/endpoint-boundary/module" "${extra_conf[@]}") > "$work/build.log" 2>&1; then
     cat "$work/build.log" >&2
     exit 1
 fi

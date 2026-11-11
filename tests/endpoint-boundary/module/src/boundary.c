@@ -609,8 +609,10 @@ static void lifecycle_activity(enum zmk_activity_state state) {
 }
 
 static void lifecycle_require_stopped(const struct device *dev) {
-    for (unsigned stream = 0; stream < MAX(DT_NUM_INST_STATUS_OKAY(zmk_input_listener), 1);
-         stream++) {
+    const unsigned capacity = CONFIG_ZMK_INPUT_INERTIA_MAX_SOURCES != 0
+                                  ? CONFIG_ZMK_INPUT_INERTIA_MAX_SOURCES
+                                  : MAX(DT_NUM_INST_STATUS_OKAY(zmk_input_listener), 1);
+    for (unsigned stream = 0; stream < capacity; stream++) {
         for (unsigned scroll = 0; scroll < 2; scroll++) {
             struct inertia_test_snapshot state;
             __ASSERT_NO_MSG(inertia_test_get_snapshot(dev, stream, scroll, &state) == 0);
@@ -618,6 +620,15 @@ static void lifecycle_require_stopped(const struct device *dev) {
                          !state.velocity[1] && !state.ema[0] && !state.ema[1],
                      "Lifecycle transition left an old stream active");
         }
+    }
+    /* Automatic mode retains every original global-listener assertion above.
+     * A selected bound must reject all unreserved global indices, plus the
+     * first invalid index even when it extends past the global listener set. */
+    for (unsigned stream = capacity;
+         stream < MAX(DT_NUM_INST_STATUS_OKAY(zmk_input_listener), capacity + 1); stream++) {
+        struct inertia_test_snapshot state;
+        __ASSERT_NO_MSG(inertia_test_get_snapshot(dev, stream, false, &state) == -EINVAL);
+        __ASSERT_NO_MSG(inertia_test_get_snapshot(dev, stream, true, &state) == -EINVAL);
     }
 }
 

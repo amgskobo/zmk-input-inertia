@@ -24,8 +24,12 @@ ENTRY_ROOT = ROOT
 CONTROL_ELF_ROOT = None
 
 WEST = '''#!/usr/bin/env python3
-import os, pathlib, shutil, sys
+import json, os, pathlib, shutil, sys
 args = sys.argv[1:]
+calls = os.environ.get('CONTROL_TOOL_CALLS')
+if calls:
+    with open(calls, 'a') as output:
+        output.write(json.dumps(args) + '\\n')
 workspace = pathlib.Path(os.environ['CONTROL_WORKSPACE'])
 if args[0] == 'topdir':
     print(workspace)
@@ -37,6 +41,10 @@ elif args[0] == 'build':
         print((pathlib.Path(config) / 'expected-errors.txt').read_text())
         sys.exit(1)
     build = pathlib.Path(args[args.index('-d') + 1])
+    if build.name.startswith('reject-'):
+        print('outside the active range' if build.name in ('reject-negative', 'reject-over')
+              else 'Inertia source limit excludes a referenced listener index')
+        sys.exit(1)
     (build / 'zephyr').mkdir(parents=True, exist_ok=True)
     runtime = build.name == 'runtime'
     source = os.environ['CONTROL_ELF']
@@ -46,7 +54,14 @@ elif args[0] == 'build':
     (build / 'zephyr/zmk.exe').chmod(0o755)
     for name in ('CMakeCache.txt', 'zephyr/zephyr.dts'):
         (build / name).write_text('admission control, not a Zephyr build\\n')
-    (build / 'zephyr/.config').write_text('CONFIG_ZMK_INPUT_INERTIA_CUSTOM_SETTINGS=y\\n')
+    extra = next((arg.split('=', 1)[1] for arg in args if arg.startswith('-DEXTRA_CONF_FILE=')), '')
+    bound = '0'
+    if extra:
+        for line in pathlib.Path(extra).read_text().splitlines():
+            if line.startswith('CONFIG_ZMK_INPUT_INERTIA_MAX_SOURCES='):
+                bound = line.split('=', 1)[1]
+    (build / 'zephyr/.config').write_text('CONFIG_ZMK_INPUT_INERTIA_CUSTOM_SETTINGS=y\\n'
+        + 'CONFIG_ZMK_INPUT_INERTIA_MAX_SOURCES=' + bound + '\\n')
 '''
 
 
@@ -134,15 +149,19 @@ class ActualLauncherAdmission(unittest.TestCase):
                    UBSAN_OPTIONS='halt_on_error=0:print_stacktrace=1',
                    PYTHONDONTWRITEBYTECODE='1')
         for key in ('ZMK_TEST_OFFLINE_WORKSPACE', 'ZMK_TEST_OUTPUT', 'INERTIA_NATIVE_ARTIFACTS',
-                    'INERTIA_NATIVE_MODE', 'INERTIA_LIFECYCLE_CASE'):
+                    'INERTIA_NATIVE_MODE', 'INERTIA_LIFECYCLE_CASE',
+                    'INERTIA_NATIVE_EXTRA_CONF', 'INERTIA_SOURCE_LIMIT_GUARD'):
             env.pop(key, None)
         return env
 
-    def execute(self, entry, kind, phase='both'):
+    def execute(self, entry, kind, phase='both', overrides=None):
         type(self).sequence += 1
         label = f'{type(self).sequence:03d}-{entry}-{kind}-{phase}'
         output = self.base / label
         env = self.environment(kind, phase)
+        env.update(overrides or {})
+        tool_calls = self.base / (label + '.tools')
+        env['CONTROL_TOOL_CALLS'] = str(tool_calls)
         env['CONTROL_ENTRY'] = entry
         if entry == 'integration':
             env['ZMK_TEST_OUTPUT'] = str(output)
@@ -168,6 +187,8 @@ class ActualLauncherAdmission(unittest.TestCase):
                                                              'UBSAN_OPTIONS': env['UBSAN_OPTIONS']}, indent=2) + '\n')
             if output.exists():
                 shutil.copytree(output, record / 'output', symlinks=True)
+            if tool_calls.exists():
+                shutil.copyfile(tool_calls, record / 'tool-calls.jsonl')
         return result, output
 
     def test_actual_elf_recovers_with_markers_and_zero_exit(self):
@@ -204,6 +225,39 @@ class ActualLauncherAdmission(unittest.TestCase):
             with self.subTest(entry=entry):
                 result, _ = self.execute(entry, 'clean')
                 self.assertEqual(result.returncode, 0, result.stdout)
+                if entry == 'integration':
+                    for profile in ('auto', 'limited', 'wide', 'fallback', 'sparse-auto',
+                                    'disabled-device'):
+                        self.assertIn('PASS source limit ' + profile + ': three same-binary runs',
+                                      result.stdout)
+                    for guard in ('base', 'child', 'sparse', 'negative', 'over'):
+                        self.assertIn('PASS source limit reject-' + guard + ':', result.stdout)
+                    guards = list((ROOT / 'tests/integration/guards').glob('*/native_sim.keymap'))
+                    self.assertEqual(len(guards), 13)
+                    for guard in guards:
+                        self.assertIn('PASS: ' + guard.parent.name + ' rejected', result.stdout)
+                    self.assertEqual(result.stdout.count('inertia endpoint boundary: PASS groups=29'),
+                                     6, result.stdout)
+                    self.assertEqual(result.stdout.count('inertia lifecycle boundary: PASS groups=11'),
+                                     6, result.stdout)
+                    self.assertEqual(result.stdout.count('PASS shared HID regression repeat '),
+                                     6, result.stdout)
+                    self.assertIn('inertia source limits: PASS profiles=6 guards=5', result.stdout)
+                    self.assertIn('inertia integration: PASS', result.stdout)
+
+    def test_canonical_entry_rejects_focused_source_guard(self):
+        for selector in ('base', 'child', 'sparse', 'device'):
+            with self.subTest(selector=selector):
+                result, output = self.execute(
+                    'integration', 'clean',
+                    overrides={'INERTIA_SOURCE_LIMIT_GUARD': selector})
+                self.assertEqual(result.returncode, 2,
+                                 'canonical integration accepted a focused source guard: '
+                                 + result.stdout)
+                self.assertIn('focused source-limit guard cannot satisfy canonical integration',
+                              result.stdout)
+                self.assertFalse(output.exists())
+                self.assertFalse((output.parent / (output.name + '.tools')).exists())
 
     def test_settings_validator_rejects_either_diagnosed_phase(self):
         for kind in ('ubsan', 'asan'):

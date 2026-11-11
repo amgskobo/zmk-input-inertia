@@ -14,11 +14,15 @@ overlays="$root/tests/review-shared-hid/pointer.overlay"
 if [ "$mode" = bypass-manual ]; then
     overlays+=";$root/tests/review-shared-hid/bypass-manual.overlay"
 fi
+extra_conf=()
+if [ -n "${INERTIA_NATIVE_EXTRA_CONF:-}" ]; then
+    extra_conf=("-DEXTRA_CONF_FILE=$INERTIA_NATIVE_EXTRA_CONF")
+fi
 west build -p=always -o=-j2 -s "$workspace/zmk/app" -d "$output/build" \
   -b native_sim//zmk_test_mock -- -DCONFIG_ASSERT=y \
   -DZMK_CONFIG="$root/tests/integration/runtime" \
   -DDTC_OVERLAY_FILE="$overlays" \
-  -DZMK_EXTRA_MODULES="$root;$root/tests/review-shared-hid" >"$output/build.log" 2>&1
+  -DZMK_EXTRA_MODULES="$root;$root/tests/review-shared-hid" "${extra_conf[@]}" >"$output/build.log" 2>&1
 sha256sum "$output/build/zephyr/zmk.exe" >"$output/binary.sha256"
 for repeat in 1 2 3; do
     if timeout 10 "$output/build/zephyr/zmk.exe" >"$output/run-$repeat.log" 2>&1; then result=0; else result=$?; fi

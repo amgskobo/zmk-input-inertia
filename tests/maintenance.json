@@ -45,8 +45,21 @@
   "failure_recovery": "Eight signed move/scroll host traces assert exact ordered axes/ticks/totals and final stop through two queue refusals, delayed consumption, two endpoint failures and invalid/equal writes. Two native endpoint groups extend27 to29: blocked/repeated EIO then success,100-102ms gaps, actual HID/slot clearing and post-cancel silence. Earlier-driver control must fail the named compressed-recovery assertion3/3. Physical reconnect NOT RUN.",
   "lifecycle": {
     "positive": "Canonical endpoint entry retains29 original groups and adds11 lifecycle groups, one binary3 times on both supported cores. Every DTS node/nonzero streams, endpoint identity/profile/disconnect/no-op, armed/queued/accepted reports, IDLE/SLEEP, fresh recovery and actual wildcard token visibility.",
-    "controls": ["endpoint-retirement", "activity-retirement", "first-stream-only", "endpoint-admission", "noop-retirement"],
+    "controls": [
+      "endpoint-retirement",
+      "activity-retirement",
+      "first-stream-only",
+      "endpoint-admission",
+      "noop-retirement"
+    ],
     "command": "python3 tests/endpoint-boundary/apply_lifecycle_fault.py FAULT DISTINCT_STAGED_OWNER; native counterexample cases and exact diagnostics in tests/README.md; compile once/case,3 qualified assertion failures/core",
     "residual": "IN-2 activity accounting exclusion requires a core filter. Keep input-thread serialization, MSC tokens and unmodified events; no power or physical idle/sleep acceptance claim."
+  },
+  "source_reservation": {
+    "default": "CONFIG_ZMK_INPUT_INERTIA_MAX_SOURCES=0 preserves all enabled-listener indices, minimum one NULL fallback; positive1..256 is an explicit index bound without remapping.",
+    "command": "bash tests/source-limits/run.sh RESOLVED_WORKSPACE FRESH_OUTPUT; included in both canonical integration variants",
+    "asserts": "Six positive native profiles (auto,2,256,no listeners,sparse-auto,disabled-device), each exact binary three times; last-valid/first-invalid snapshot boundaries, unchanged invalid events/state, NULL source0, settings/shared cancellation. Device-status gate matches actual callback registration; all children still counted. Qualified missing-base,missing-child and omitted-device-gate controls on both cores. Five named compile/Kconfig rejections include base,disabled-child,sparse,-1,257. All29 endpoint+11 lifecycle groups and7 shared-HID reports also run under limited2, three repeats/core.",
+    "limits": "Compile-time route guard cannot discover direct API callers; board selection must inventory them. Fixed RAM formula and compiled indices must be rechecked. Native probes/object sizes do not measure runtime high-water or physical HID/timing/power.",
+    "entry_admission": "Canonical integration rejects nonempty INERTIA_SOURCE_LIMIT_GUARD before tools/output. Actual clean-ELF original-entry regression fails four focused selectors; corrected entry rejects each with exit2/no tools/no output. Normal default dispatch requires all6profiles,5new+13original guards and both default/limited endpoint/HID completions; real firmware observations remain separately identified."
   }
 }

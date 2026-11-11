@@ -1,0 +1,10 @@
+/* SPDX-License-Identifier: MIT */
+/ {
+    limit_first { compatible = "zmk,input-listener"; device = <&kscan>; };
+    limit_second { compatible = "zmk,input-listener"; device = <&kscan>;
+        /* Upstream enumerates every child, regardless of its status. */
+        child { status = "disabled"; layers = <1>;
+            input-processors = <&inertia_runtime_test>;
+        };
+    };
+};

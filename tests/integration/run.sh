@@ -8,6 +8,11 @@ tests_dir=/src/tests/integration
 
 variant="${1:-upstream}"
 case "$variant" in upstream|dya) ;; *) echo "expected upstream or dya" >&2; exit 2 ;; esac
+# A focused guard is a standalone control, not the complete integration matrix.
+if [ -n "${INERTIA_SOURCE_LIMIT_GUARD:-}" ]; then
+    echo 'focused source-limit guard cannot satisfy canonical integration' >&2
+    exit 2
+fi
 # Refuse existing evidence before dependency tools or workspace preparation.
 if [ -n "${ZMK_TEST_OUTPUT:-}" ]; then
     work_dir="$ZMK_TEST_OUTPUT"
@@ -110,5 +115,7 @@ INERTIA_NATIVE_ARTIFACTS="$work_dir/endpoint-boundary" bash /src/tests/endpoint-
 bash /src/tests/review-shared-hid/run.sh "$workspace" "$work_dir/shared-hid"
 
 bash "$tests_dir/guards/run.sh" "$workspace" "$work_dir/build/guards"
+
+bash /src/tests/source-limits/run.sh "$workspace" "$work_dir/source-limits"
 
 echo "inertia integration: PASS"

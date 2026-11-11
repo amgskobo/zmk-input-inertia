@@ -162,6 +162,37 @@ Invalid intervals, threshold ranges, and threshold ordering are also rejected at
 
 ## Concurrency and multiple listeners
 
+`CONFIG_ZMK_INPUT_INERTIA_MAX_SOURCES=0` is the default: every enabled ZMK
+input listener reserves its own stream in every Inertia node, with at least
+stream zero for calls with a `NULL` processor state. A board may opt into a
+positive bound from 1 to 256 after inspecting its **compiled** listener indices
+and every direct API caller. For example, `CONFIG_ZMK_INPUT_INERTIA_MAX_SOURCES=2`
+reserves indices 0 and 1. This is an index bound, not the number of listeners
+that reference Inertia: a sole reference from listener 4 still needs a bound of
+at least 5. Indices are neither compacted nor relabeled.
+
+The build rejects an Inertia reference from an enabled listener whose device is
+enabled at or above the bound, in its base route or any child route. This includes
+children marked disabled, matching the selected ZMK listener's enumeration.
+A disabled device has no listener callback and is excluded from that check;
+enabling it rechecks its original index without remapping. Direct callers are
+not discoverable from DTS and must stay within the bound; an out-of-range event
+passes through unchanged without borrowing another stream. `NULL` always uses
+stream zero. The option changes a fixed allocation at build time; it is not a
+runtime setting, a queue-size control, or a per-node motion-policy change.
+
+For each node the reservation is `fixed node bytes + reserved indices *
+sizeof(struct inertia_stream)`. Each stream retains separate move/scroll state,
+two delayable works and two pending-token slots. On the reviewed Cortex-M build
+the stride is 192 bytes, so reducing an independently proven unused range from
+5 to 2 saves 576 bytes per node. Other ABIs/configurations can differ. Keep the
+default unless all producers fit; after changing a board bound, rebuild every
+affected role and reset target, inspect the generated indices, config/DTS/ELF,
+and remeasure actual input/HID timing, cancellation, reconnect and settings
+behavior on the installed image. Object sizes do not measure runtime stack or
+physical latency. No thread, heap allocation or runtime wakeup is added by the
+bound or its compile-time checks.
+
 X and Y events are accumulated until the event marked `sync` closes the input frame. An axis omitted by the device is treated as zero for that frame. Each ZMK input listener has independent frame and velocity history, so two devices cannot combine their axes accidentally. An event whose listener index is outside the listeners the build defines has no history of its own: it passes through unchanged instead of joining the first listener's.
 
 Zero auxiliary axes keep the same stream's current motion kind. A zero wheel

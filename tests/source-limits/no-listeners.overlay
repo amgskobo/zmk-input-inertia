@@ -1,0 +1,5 @@
+/* SPDX-License-Identifier: MIT */
+#include <behaviors.dtsi>
+&{/mkp_input_listener} { status = "disabled"; };
+&{/mmv_input_listener} { status = "disabled"; };
+&{/msc_input_listener} { status = "disabled"; };

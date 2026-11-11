@@ -165,6 +165,33 @@ decay factorは百分率で、ビルド時に範囲検査されます。
 
 ## 並行処理と複数listener
 
+`CONFIG_ZMK_INPUT_INERTIA_MAX_SOURCES=0` が既定値です。有効なZMK input
+listenerごとに、各Inertiaノードへ独立streamを予約し、processor stateが
+`NULL`の直接呼び出し用に最低でもstream 0を確保します。ボードでは**コンパイル後の**
+listener indexと全直接API呼び出しを確認した後、1〜256の正の上限を選べます。
+例えば`CONFIG_ZMK_INPUT_INERTIA_MAX_SOURCES=2`はindex 0と1を予約します。
+これは参照listenerの個数ではなくindexの上限です。listener 4からだけ参照する場合でも
+最低5が必要です。indexの詰め直しや付け替えは行いません。
+
+deviceも有効なlistenerのbase経路または任意の子経路から上限以上のindexでInertiaを参照すると、
+ビルドが拒否されます。選択ZMKのlistener列挙と同様に、disabled指定の子も対象です。
+deviceがdisabledならlistener callbackが存在せず、この検査の対象外です。
+deviceを有効化すると、元のindexを付け替えず再検査します。
+DTSから発見できない直接呼び出しも、選択した範囲を守る必要があります。
+範囲外イベントは別streamを借用せず、そのまま通過します。`NULL`は常にstream 0です。
+この設定はビルド時の固定予約量を変えるもので、実行時設定、queue容量設定、
+ノードごとのmotion policy変更ではありません。
+
+各ノードの予約量は`固定ノードbytes + 予約index数 * sizeof(struct inertia_stream)`です。
+各streamはmove/scroll状態、2個のdelayable work、2個のpending-token slotを保持します。
+確認したCortex-Mビルドのstrideは192 bytesなので、未使用であることを独立に確認した
+範囲を5から2へ変更するとノードあたり576 bytes減ります。他のABIや構成では異なります。
+全producerが収まると確認できなければ既定値を維持してください。ボードの上限変更後は、
+影響する全roleとreset targetを再ビルドし、生成index、config/DTS/ELFを確認し、
+インストールしたイメージで実際のinput/HID timing、cancel、reconnect、settings動作を
+再測定してください。objectサイズは実行時stackや物理latencyの測定ではありません。
+上限やコンパイル時検査によりthread、heap割り当て、実行時wakeupは増えません。
+
 X/Yイベントは`sync`が付いたイベントで入力フレームが閉じるまで蓄積されます。deviceが送らなかった軸は、そのフレームでは0として扱います。ZMK input listenerごとにフレームと速度履歴を分離するため、2つのdeviceの軸が誤って混ざることはありません。ビルドで定義されたlistenerの範囲外のindexを持つイベントは専用の履歴を持たず、先頭listenerの履歴に混ざらないよう、変更せずにそのまま通過させます。
 
 同じstreamの補助的な0軸は、現在の操作種別に沿って扱います。実際の移動量に0のwheel軸が混ざる場合や、スクロールに0のpointer軸が混ざる場合でも、イベント順序によってフレームや直前の手動速度平均を消しません。0だけのフレームは慣性を停止し、非ゼロの移動／スクロール入力は従来どおり操作種別を切り替えます。

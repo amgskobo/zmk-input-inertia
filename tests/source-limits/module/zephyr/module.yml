@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: MIT
+name: inertia-source-limit-fixture
+build:
+  cmake: .
+  kconfig: ../../endpoint-boundary/module/Kconfig

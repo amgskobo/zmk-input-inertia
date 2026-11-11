@@ -1,0 +1,8 @@
+/* SPDX-License-Identifier: MIT */
+/ {
+    limit_first { compatible = "zmk,input-listener"; device = <&kscan>; };
+    limit_second { compatible = "zmk,input-listener"; device = <&kscan>; };
+    limit_third { compatible = "zmk,input-listener"; device = <&kscan>;
+        input-processors = <&inertia_runtime_test>;
+    };
+};

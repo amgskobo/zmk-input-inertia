@@ -41,5 +41,6 @@ int main(int argc, char **argv) {
     puts("inertia endpoint boundary: PASS groups=29");
     puts("inertia lifecycle boundary: PASS groups=11");
     puts("inertia shared HID regression: PASS");
+    puts("inertia source limit: PASS");
     return 0;
 }

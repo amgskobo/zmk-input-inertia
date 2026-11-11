@@ -10,6 +10,23 @@ config ZMK_INPUT_PROCESSOR_INERTIA
 	depends on (!ZMK_SPLIT || ZMK_SPLIT_ROLE_CENTRAL)
 	select ZMK_LOW_PRIORITY_WORK_QUEUE
 
+config ZMK_INPUT_INERTIA_MAX_SOURCES
+    int "Reserved Inertia source indices (0 for all listeners)"
+    depends on ZMK_INPUT_PROCESSOR_INERTIA
+    range 0 256
+    default 0
+    help
+      Zero keeps one independent stream per enabled ZMK input listener, with
+      at least stream zero for callers without a processor state. A positive
+      value reserves source indices 0 through this value minus one for every
+      Inertia node. It is an index bound, not a count of referencing listeners;
+      sparse listener indices still require their full range. Every enabled
+      listener whose device is enabled has its base and child routes checked
+      at build time. Direct callers must also fit the selected range. Out-of-range
+      events pass through without using another stream. Rebuild and verify
+      the effective DTS and all direct callers before selecting a smaller
+      board-specific bound; the default does not reduce generic capacity.
+
 config ZMK_INPUT_INERTIA_LOG_LEVEL
     int "zmk-input-inertia log level (0 off, 1 error, 2 warning, 3 info, 4 debug)"
     range 0 4
